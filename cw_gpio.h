@@ -23,6 +23,7 @@ struct gpioOper {
 
 struct gpioOper *init_gpio(void);
 
+int get_gpio_value(struct gpioOper *gpio);
 void free_gpio(struct gpioOper *gpio);
 
 #endif

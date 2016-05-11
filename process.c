@@ -21,6 +21,7 @@
 #include <time.h>
 
 #include "process.h"
+#include "cw_gpio.h"
 
 
 #define  TRIG_FREQ   (64)  /* 触发频率设置为64Hz*/
@@ -28,7 +29,7 @@
 
 int init_timer(void)
 {  
-	int fd = open ("/dev/rtc", O_RDONLY);  
+	int fd = open ("/dev/rtc0", O_RDONLY);  
 
 	if(fd < 0)  
 	{  
@@ -96,7 +97,17 @@ int free_timer(int fd)
 }
 
 
-void test_process(int fd)
+void get_signal(struct gpioOper *gpio)
+{
+	int val;
+
+	val = get_gpio_value(gpio);
+	printf("get io : %d\n", val);
+
+
+}
+
+void test_process(int fd, struct gpioOper *gpio)
 {
 	int ret = 0;
 	int i = 0;
@@ -107,10 +118,13 @@ void test_process(int fd)
 	clock_gettime(CLOCK_MONOTONIC,&last_ts);
 	//lastTime = ts.tv_sec * 1000 + ts.tv_nsec/1000000;
 	set_timer(fd, 64);
+//	set_timer(fd, 128);
 
-	for( i = 0; i < 100; i++){
+//	for( i = 0; i < 100; i++){
+	while(1) {
 		ret = wait_for_timer(fd);
 
+		get_signal(gpio);
 		if(ret < 0){
 
 		}

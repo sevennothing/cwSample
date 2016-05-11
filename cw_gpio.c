@@ -18,10 +18,23 @@
 
 
 
-#define GPIO_CTL_BASE 0x56000000
+//TODO: make sure GPIIO address
+//#define GPIO_CTL_BASE 0x7F008000  /* 6410 */
+#define GPIO_CTL_BASE 0x56000000 /* 2440 */
+/*
 #define rGPBCON 0x10 
 #define rGPBDAT 0x14 
 #define rGPBUP 0x18
+
+#define rGPFCON 0x50 
+#define rGPFDAT 0x54 
+#define rGPFUP 0x58
+*/
+
+#define rGPBCON 0x50 
+#define rGPBDAT 0x54 
+#define rGPBUP 0x58
+
 
 #define MEM_LEN 0xbc
 
@@ -31,7 +44,9 @@ struct gpioOper *init_gpio(void){
 
 	struct gpioOper *gpio = calloc(1,sizeof(struct gpioOper));
 
-	gpio->fd = open(dev_name, O_RDWR);   
+	int val;
+
+	gpio->fd = open(dev_name, O_RDWR);
 
 	if(gpio->fd < 0){   
 		printf("open %s is error\n",dev_name);   
@@ -56,7 +71,22 @@ struct gpioOper *init_gpio(void){
 	gpio->GPBUP = (volatile unsigned int *) (gpio->gpioBase + rGPBUP);
 
 	printf("calloc gpio successed!\n");
+
+	/* set GPIO is input */
+	val = *(volatile unsigned int *) gpio->GPBCON;
+	*(volatile unsigned int *)gpio->GPBCON = val & 0xfffe;
+	val = *(volatile unsigned int *) gpio->GPBUP;
+	*(volatile unsigned int *)gpio->GPBUP = val & 0xfffe;
+
+	printf("init gpio successed!\n");
+
 	return gpio;
+
+}
+
+int get_gpio_value(struct gpioOper *gpio)
+{
+	return (*(volatile unsigned int *)gpio->GPBDAT) & 0x01;
 
 }
 

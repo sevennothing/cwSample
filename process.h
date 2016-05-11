@@ -11,12 +11,15 @@
 #ifdef __PROCESS_H
 #define __PROCESS_H
 
+#include "cw_gpio.h"
 
 int init_timer(void);
 
 int free_timer(int fd);
 
-void test_process(int fd);
+void get_signal(struct gpioOper *gpio);
+
+void test_process(int fd, struct gpioOper *gpio);
 
 
 #endif

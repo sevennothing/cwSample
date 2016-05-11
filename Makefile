@@ -1,6 +1,8 @@
 
 PREFIX=/usr/local
 
+CC=arm-linux-gcc
+
 ALL: cws
 
 install: ALL

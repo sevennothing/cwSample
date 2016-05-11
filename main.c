@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 
 
 	timerFd = init_timer();
-	test_process(timerFd);
+	test_process(timerFd, cwGpio);
 	free_timer(timerFd);
 
 
