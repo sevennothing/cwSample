@@ -139,7 +139,7 @@ int run_process(struct signalProcess *sp)
 
 		if(start){
 			stream_fifo_write(sp, level);
-			if((start % 5) == 0){ /*每采样5个点进行一次查找*/
+			if((start % 16) == 0){ /*每采样5个点进行一次查找*/
 				find_transmit_point(sp);	
 
 			}
@@ -166,14 +166,14 @@ int run_process(struct signalProcess *sp)
 					int cbit = 0;
 					int cb = 0;
 				printf("....(%d)\n", sp->minCZ);
-					cbit = start % sizeof(int);
+					cbit = start % sizeof(char);
 					if(cbit != 0){
-						cbit = sizeof(int) - cbit;
+						cbit = sizeof(char) - cbit;
 						// 插入补齐 TODO: 插值算法需要优化
 						for(cb = 0; cb < cbit; cb++)
 							stream_fifo_write(sp, INVALID_LEVEL);
 					}
-					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / sizeof(int));
+					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / sizeof(char));
 					start = 0;
 				}
 				
@@ -233,8 +233,6 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 		l = Hbit;
 	}
 
-	printf("??%d\n",sp->curCO);
-
 }
 
 static int find_transmit_point(struct signalProcess *sp)
@@ -244,16 +242,15 @@ static int find_transmit_point(struct signalProcess *sp)
 	unsigned int minCZ = 0xffff ;//最少连续0个数
 	char new = 1;
 	//scan zero min
-	for(i = STREAM_MAX_SECONDS-1; i>=0; i--){
-				printf("xx>%d ",i);
-		for(j=31; i >=0; i--){
-			if((sp->level_strem[i] & (1<< j)) == 0){
+	for(i = STREAM_MAX_SECONDS; i>0; i--){
+		for(j=31; j >=0; j--){
+			if((sp->level_strem[i-1] & (1<< j)) == 0){
 				//This is zero
 				new = 0;
 				c++;
 			}else if((new == 0) &&( c < minCZ)){
 				minCZ = c;		
-				printf("==>%d ",minCZ);
+				//printf("==>%d ",minCZ);
 				c = 0;
 				new = 1;
 			} else{
@@ -262,8 +259,6 @@ static int find_transmit_point(struct signalProcess *sp)
 			}
 		}
 	}
-
-	printf("\n");
 	sp->minCZ = minCZ;
 
 }

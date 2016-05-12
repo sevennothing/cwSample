@@ -28,7 +28,7 @@ enum tmode {
 #define  MORSE_CHAR_MAX    (1024)
 #define  STREAM_BIT_MAX   (4000)
 //#define  STREAM_MAX_SECONDS (60)     /* 1min 数据*/
-#define  STREAM_MAX_SECONDS (4)     /* 1min 数据*/
+#define  STREAM_MAX_SECONDS (2)     /* 1min 数据*/
 
 struct signalProcess {
 	enum tmode timer_mode;
