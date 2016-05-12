@@ -7,10 +7,10 @@
  *     <author>        <time>        <desc>
  *
  ******************************************************************************/
-
-#ifdef __TRANS_H
+#ifndef __TRANS_H
 #define __TRANS_H
 
 
+int transmit_packet( char buff[], int len);
 
 #endif
