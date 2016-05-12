@@ -28,7 +28,7 @@ enum tmode {
 #define  MORSE_CHAR_MAX    (1024)
 #define  STREAM_BIT_MAX   (4000)
 //#define  STREAM_MAX_SECONDS (60)     /* 1min 数据*/
-#define  STREAM_MAX_SECONDS (2)     /* 1min 数据*/
+#define  STREAM_MAX_SECONDS (20)     /* 1min 数据*/
 
 struct signalProcess {
 	enum tmode timer_mode;
@@ -74,7 +74,7 @@ int run_process(struct signalProcess *sp);
 	if(sp->dithering_pass_enable && (sp->soft_dithering_pass != NULL)){\
 		char flag = 0;\
 		sp->soft_dithering_pass(sp, &flag); \
-		if(!flag && (start > STOP_STATUS)){\
+		if(!flag && (start > 0)){\
 			level = INVALID_LEVEL;\
 			start++;\
 		}else if(!flag && (start == STOP_STATUS)){\
@@ -83,7 +83,7 @@ int run_process(struct signalProcess *sp);
 		else if(flag && (start == STOP_STATUS)) start = 1;\
 	}else if(start == STOP_STATUS) {start = 1;} \
 	else { start++; }\
-}else if(start > STOP_STATUS){\
+}else if(start > 0){\
 	start++;}
 	
 

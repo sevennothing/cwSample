@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 
 
 	/* 启用软件消除抖动 */
-	//cwSp->dithering_pass_enable = 1;
+	cwSp->dithering_pass_enable = 1;
 
 	//modify_signal_process(cwSp);
 	
