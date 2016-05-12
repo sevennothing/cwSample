@@ -35,12 +35,14 @@ int transmit_packet( char buff[], int len)
 {
 	
 	int i = 0;
+#if 0
 	printf("transmit stream info(%d):", len);
 	for(i=0; i<len; i++){
 		printf(" %02x", (unsigned char)buff[i]);
 	}
 	printf("\n");
 	fflush(stdout);
+#endif
 
 	// 注意字节序问题
 	/* todo: 通过UDP 传输数据*/

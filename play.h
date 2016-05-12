@@ -11,7 +11,43 @@
 #ifndef __PLAY_H
 #define __PLAY_H
 
+#ifndef  SOUND_CARD
 #include <alsa/asoundlib.h>
+struct pcmConf
+{
+	snd_pcm_t* handle; //PCI设备句柄
+	int bit;	 // 采样位数
+	int channels;
+	int frequency;
+	int size;
+	int datablock;
+	char *buffer;
+	snd_pcm_uframes_t frames;
+
+};
+
+int init_pcm_play(struct pcmConf *pcm);
+void free_pcm_play(struct pcmConf *pcm);
+
+void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len);
+
+#else
+#include <linux/soundcard.h>
+struct pcmConf
+{
+	int handle;
+	int bit;
+	int frequency;
+	int size;
+	char *buffer;
+
+
+};
+int init_pcm_play(struct pcmConf *pcm);
+void free_pcm_play(struct pcmConf *pcm);
+
+void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len);
+#endif
 
 //#define SAMPLERATE 8000
 #define SAMPLERATE 44100
@@ -38,26 +74,6 @@
 //#define WEXTRA 20
 
 
-
-
-
-struct pcmConf
-{
-	snd_pcm_t* handle; //PCI设备句柄
-	int bit;	 // 采样位数
-	int channels;
-	int frequency;
-	int size;
-	int datablock;
-	char *buffer;
-	snd_pcm_uframes_t frames;
-
-};
-
-int init_pcm_play(struct pcmConf *pcm);
-void free_pcm_play(struct pcmConf *pcm);
-
-void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len);
 
 //void setupVoice(int hz, int amp);
 

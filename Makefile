@@ -1,7 +1,7 @@
 
 PREFIX=/usr/local
 
-#CC=arm-linux-gcc
+CC=arm-linux-gcc -DSOUND_CARD
 
 CFLAGS+=-DENABLE_DEUG_SIM
 CFLAGS+=-DSELF_TEST_FOR_PIPE
@@ -12,7 +12,8 @@ install: ALL
 	        install -sc cws ${PREFIX}/bin
 
 cws: cw_gpio.o main.o trans.o process.o pcm.o play.o
-	        ${CC} ${CFLAGS} -o cws -lrt -lm -lasound $^
+	        #${CC} ${CFLAGS} -o cws -lrt -lm -lasound $^
+	        ${CC} ${CFLAGS} -o cws -lrt -lm  $^
 
 
 cw_gpio.o: cw_gpio.c cw_gpio.h

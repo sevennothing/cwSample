@@ -5,6 +5,7 @@
  * Description:
  *     信号仅对有效信元进行消除抖动;
  *     目前仅实现RTC定时模式;
+ *     TODO: 发送时机的确定，应当是一个完整的字
  * History:
  *     <author>        <time>        <desc>
  *
@@ -35,6 +36,7 @@ static int free_timer(int fd);
 static int wait_for_timer(int fd);
 static int soft_dithering_pass(struct signalProcess *sp, char *flag);
 static int stream_fifo_write(struct signalProcess *sp, char v);
+static int find_transmit_point(struct signalProcess *sp);
 
 static int modifyFlag = 0;
 
@@ -118,6 +120,7 @@ int run_process(struct signalProcess *sp)
 	clock_gettime(CLOCK_MONOTONIC,&last_ts);
 
 	set_timer(sp->fd, sp->sampleFreq_Hz);
+	sp->curCO = 0;
 
 	while(1){
 		if(modifyFlag){
@@ -136,6 +139,10 @@ int run_process(struct signalProcess *sp)
 
 		if(start){
 			stream_fifo_write(sp, level);
+			if((start % 5) == 0){ /*每采样5个点进行一次查找*/
+				find_transmit_point(sp);	
+
+			}
 
 			if(sp->decode_enable && (sp->decode_process != NULL)){
 				//TODO: 电信号解码成morse
@@ -145,9 +152,28 @@ int run_process(struct signalProcess *sp)
 
 			if(sp->transmit_enable && sp->transmit_cb != NULL){
 				//TODO: 网络传输采样信息
-				if(start == sp->transmit_pos){
+				
+			//	if(start == sp->transmit_pos){
+			//		/*启动传输*/	
+			//		sp->transmit_cb((char *)sp->level_strem, (sp->transmit_pos / sp->sampleFreq_Hz) * sizeof(int));
+			//		start = 0;
+			//	}
+				
+				if(sp->curCO < 7){
+
+				}else if( sp->curCO >= (sp->minCZ * 7)){
 					/*启动传输*/	
-					sp->transmit_cb((char *)sp->level_strem, (sp->transmit_pos / sp->sampleFreq_Hz) * sizeof(int));
+					int cbit = 0;
+					int cb = 0;
+				printf("....(%d)\n", sp->minCZ);
+					cbit = start % sizeof(int);
+					if(cbit != 0){
+						cbit = sizeof(int) - cbit;
+						// 插入补齐 TODO: 插值算法需要优化
+						for(cb = 0; cb < cbit; cb++)
+							stream_fifo_write(sp, INVALID_LEVEL);
+					}
+					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / sizeof(int));
 					start = 0;
 				}
 				
@@ -157,7 +183,7 @@ int run_process(struct signalProcess *sp)
 				runtime = (ts.tv_sec - last_ts.tv_sec) * 1000 + (ts.tv_nsec - last_ts.tv_nsec)/1000000;
 				last_ts = ts;
 				//printf("get io : %d(%d)\n", level, runtime);
-				printf("get io : ");
+				printf("get io(%02x): ", (unsigned char)start);
 				for(k=0; k < STREAM_MAX_SECONDS; k++){
 					if(sp->verbose == 1){
 						/* 按16进制显示*/
@@ -197,11 +223,48 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 {
 	int i = 0;
 	char l = v & 0x01;
+	if(l == INVALID_LEVEL)
+		sp->curCO++;
+	else
+		sp->curCO = 0;
 	for(i = 0; i < STREAM_MAX_SECONDS; i++){
 		char Hbit = (sp->level_strem[i] & 0x80000000) ? 1:0;
 		sp->level_strem[i] = (((sp->level_strem[i] & 0x7fffffff) << 1 ) | l);
 		l = Hbit;
 	}
+
+	printf("??%d\n",sp->curCO);
+
+}
+
+static int find_transmit_point(struct signalProcess *sp)
+{
+	int i,j;
+	unsigned int c = 0;
+	unsigned int minCZ = 0xffff ;//最少连续0个数
+	char new = 1;
+	//scan zero min
+	for(i = STREAM_MAX_SECONDS-1; i>=0; i--){
+				printf("xx>%d ",i);
+		for(j=31; i >=0; i--){
+			if((sp->level_strem[i] & (1<< j)) == 0){
+				//This is zero
+				new = 0;
+				c++;
+			}else if((new == 0) &&( c < minCZ)){
+				minCZ = c;		
+				printf("==>%d ",minCZ);
+				c = 0;
+				new = 1;
+			} else{
+				new = 1;
+				c = 0;
+			}
+		}
+	}
+
+	printf("\n");
+	sp->minCZ = minCZ;
 
 }
 

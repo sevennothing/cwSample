@@ -27,7 +27,8 @@ int pipe_fd[2];
 
 #ifdef ENABLE_DEUG_SIM
 
-char sos[] = {1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,1,1,1,1};
+//char sos[] = {1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,1,1,1,1};
+char sos[] = {0,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,0,1,0,1,0,1,1,1,1,1,1,1};
 
 char sos_sim_dithering[] = {1,1,1,1,1,1,0,1,1,0,0,1,0,0,1,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,1,1,1};
 
@@ -150,9 +151,10 @@ int main(int argc, char **argv)
 		int ret;
 		struct pcmConf g_pcmPlay;
 
+#ifndef  SOUND_CARD
 		g_pcmPlay.bit = 8;
 		g_pcmPlay.channels = 1;
-		g_pcmPlay.frequency = 800;
+		g_pcmPlay.frequency = 400;
 		g_pcmPlay.datablock = 1;
 
 		
@@ -165,6 +167,21 @@ int main(int argc, char **argv)
 		printf("  frames:%d\n", g_pcmPlay.frames);
 		printf("  size:%d\n", g_pcmPlay.size);
 		printf("... %x\n", g_pcmPlay.buffer);
+#else
+		g_pcmPlay.bit = 8;
+		//g_pcmPlay.frequency = 8000;
+		//g_pcmPlay.size = 8192;
+
+		g_pcmPlay.frequency = 1000;
+		g_pcmPlay.size = 1024;
+		
+		init_pcm_play(&g_pcmPlay);
+		printf("PCM confi:\n");
+		printf("  采样位数:%d\n", g_pcmPlay.bit);
+		printf("  采样频率:%d\n", g_pcmPlay.frequency);
+		printf("  size:%d\n", g_pcmPlay.size);
+
+#endif
 
 
 #ifdef SELF_TEST_FOR_PIPE

@@ -82,6 +82,7 @@ void setupVoice(int hz, int amp) {
 
 
 
+#ifndef  SOUND_CARD
 /*****************************  alas  Driver  ******************************/
 int init_pcm_play(struct pcmConf *pcm)
 {
@@ -178,45 +179,10 @@ void free_pcm_play(struct pcmConf *pcm)
 
 
 /***************************************************************************/
-#if 0
-	while (1)
-	{
-		memset(buffer,0,sizeof(buffer));
-		ret = fread(buffer, 1, size, fp);
-		if(ret == 0)
-		{
-			printf("歌曲写入结束\n");
-			break;
-		}
-		else if (ret != size)
-		{
-		}
-		// 写音频数据到PCM设备 
-		while(ret = snd_pcm_writei(handle, buffer, frames)<0)
-		{
-			usleep(2000); 
-			if (ret == -EPIPE)
-			{
-				/* EPIPE means underrun */
-				fprintf(stderr, "underrun occurred\n");
-				//完成硬件参数设置，使设备准备好 
-				snd_pcm_prepare(handle);
-			}
-			else if (ret < 0)
-			{
-				fprintf(stderr,
-						"error from writei: %s\n",
-						snd_strerror(ret));
-			}
-		}
 
-	}
-#endif
-
-
-void pcmPlay(struct pcmConf *g_pcmPlay, char buff[], int len)
+void pcmPlay2(struct pcmConf *g_pcmPlay, char buff[], int len)
 {
-	int ret;
+	int ret,i;
 		FILE *fp;
 		fp=fopen("sos.wav","rb");
 		if(fp==NULL)
@@ -240,11 +206,19 @@ void pcmPlay(struct pcmConf *g_pcmPlay, char buff[], int len)
 			}
 
 			printf("?%x:%x  %x : %d \n", g_pcmPlay->handle, g_pcmPlay->buffer , *(g_pcmPlay->buffer + 10), g_pcmPlay->frames);
+			for(i=0; i< g_pcmPlay->size; i++){
+				if(g_pcmPlay->buffer[i] & 0xff != 0x80)
+					g_pcmPlay->buffer[i] = 0xff;
+				else
+					g_pcmPlay->buffer[i] = 0x80;
+				printf("%02x ",(unsigned char)*(g_pcmPlay->buffer + i));
+			}
+			printf("\n");
 
 
 			// 写音频数据到PCM设备 
 			while(ret = snd_pcm_writei(g_pcmPlay->handle, g_pcmPlay->buffer, g_pcmPlay->frames)<0)
-				//              while(ret = snd_pcm_writei(ipcmPlay->handle, ipcmPlay->buffer, 32)<0)
+		//		              while(ret = snd_pcm_writei(g_pcmPlay->handle, g_pcmPlay->buffer, 32)<0)
 			{
 				usleep(2000); 
 				if (ret == -EPIPE)
@@ -262,10 +236,10 @@ void pcmPlay(struct pcmConf *g_pcmPlay, char buff[], int len)
 				}
 
 			}
-			usleep(100000);
+			break;
+//			usleep(100000);
 		}
 }
-#if 0
 
 void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 {
@@ -288,17 +262,18 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 		// do play
 		for( k= 0; k < 32; k++){
 			if( *val & 0x80000000){
-				//memset(pb, 0x7f, 250);  /* 250 是插值比*/
-				*pb = 0x7f;
+				memset(pb, 0xff, 52);  /* 250 是插值比*/
+				//*pb = 0xff;
 			}else{
-				//memset(pb, 0x0, 250);  /* 250 是插值比*/
-				*pb = 0x0;
+				memset(pb, 0x80, 52);  /* 250 是插值比*/
+				//*pb = 0x80;
 			}
 			*val =(*val & 0x7fffffff) << 1;
-			pb++;
+		//	pb++;
+			pb+=52;
 		}
 #if 1
-		memset(ipcmPlay->buffer, 0xaa, ipcmPlay->size);
+		//memset(ipcmPlay->buffer, 0xaa, ipcmPlay->size);
 		printf("?%x:%x  %x : %d \n", ipcmPlay->handle, ipcmPlay->buffer , *(ipcmPlay->buffer + 10), ipcmPlay->frames);
 
 		// 写音频数据到PCM设备 
@@ -326,4 +301,101 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	}
 
 }
+
+#else
+#include <fcntl.h>
+int init_pcm_play(struct pcmConf *pcm)
+{
+
+	int ret;
+	
+	//打开声卡设备，并设置声卡播放参数，这些参数必须与声音文件参数一致
+	pcm->handle=open("/dev/audio", O_WRONLY);
+
+	if(pcm->handle == -1){
+		perror("open Audio_Device fail");
+		return -1;
+	}
+
+	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_RATE,&pcm->frequency);
+	if(ret==-1){
+		perror("error from SOUND_PCM_WRITE_RATE ioctl");
+		return -1;
+	}
+
+	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_BITS,&pcm->bit);
+	if(ret==-1){
+		perror("error from SOUND_PCM_WRITE_BITS ioctl");
+		return -1;
+	}
+
+	pcm->buffer =(char*)malloc(pcm->size);
+
+	
+	return 0;
+}
+
+void free_pcm_play(struct pcmConf *pcm)
+{
+	close(pcm->handle);
+
+	free(pcm->buffer);
+}
+
+void inline insert_point(char *p, int c)
+{
+	int baseV = 0x80;
+	int i = 0;
+	for(i = 0; i< c; i++)
+		*(p+i) = 0x80 - 0x20 * cos(1000/(i+1));
+
+}
+void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
+{
+	int *val;
+	int c = len / sizeof(int);
+	int i = 0;
+	char *p = buff + ( c -1 ) * sizeof(int);
+	int k;
+	int ret;
+
+	int bi = ipcmPlay->frequency / 32;
+
+	char *pb = ipcmPlay->buffer;
+	memset(pb,0,sizeof(ipcmPlay->size));
+
+	for(i=c; i>0; i--){
+		if(i < c){
+			p = p - sizeof(int);
+		}
+		val = (int *)p;
+		// do play
+		for( k= 0; k < 32; k++){
+			if( *val & 0x80000000){
+				memset(pb, 0x00, bi);  /* 250 是插值比*/
+			}else{
+				//memset(pb, 0x80, bi);  /* 250 是插值比*/
+				insert_point(pb, bi);
+			}
+			*val =(*val & 0x7fffffff) << 1;
+			pb+=bi;
+		}
+#if 1
+		//printf("?%x:%x  %x : %d \n", ipcmPlay->handle, ipcmPlay->buffer , *(ipcmPlay->buffer + 10), bi );
+
+		//向端口写入，播放
+		ret=write(ipcmPlay->handle, ipcmPlay->buffer, ipcmPlay->frequency);
+		if(ret==-1){
+			perror("Fail to play the sound!");
+			return;
+		}
+
+
+#endif
+		pb = ipcmPlay->buffer;
+
+	}
+
+}
+
 #endif
