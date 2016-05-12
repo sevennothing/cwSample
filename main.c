@@ -171,8 +171,8 @@ int main(int argc, char **argv)
 		g_pcmPlay.bit = 8;
 		//g_pcmPlay.frequency = 8000;
 		//g_pcmPlay.size = 8192;
-
-		g_pcmPlay.frequency = 1000;
+		
+		g_pcmPlay.frequency = 1024; /* 必须设置TRIG_FREQ 的整数倍 */
 		g_pcmPlay.size = 1024;
 		
 		init_pcm_play(&g_pcmPlay);
@@ -180,6 +180,10 @@ int main(int argc, char **argv)
 		printf("  采样位数:%d\n", g_pcmPlay.bit);
 		printf("  采样频率:%d\n", g_pcmPlay.frequency);
 		printf("  size:%d\n", g_pcmPlay.size);
+
+		if(g_pcmPlay.frequency % TRIG_FREQ){
+			printf("warning: player sample frequency can't be divisible by TRIGE_FREQ(%d)\n", TRIG_FREQ);
+		}
 
 #endif
 

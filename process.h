@@ -38,7 +38,7 @@ struct signalProcess {
 
 	int fd;     /* timer handle */
 	int minCZ;  /* 最少连0个数 */
-	int curCO;  /* 当前连1个数 */
+	int curCinva;  /* 当前连1个数 */
 
 	char morse_uff[MORSE_CHAR_MAX];
 	int level_strem[STREAM_MAX_SECONDS];  /* 一个int 数据存储1s的数据 */

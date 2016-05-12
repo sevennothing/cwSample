@@ -97,7 +97,7 @@ int run_process(struct signalProcess *sp)
 	int ret = 0;
 	int morseP = 0;	 /* morse 字符位置 */
 	int streamP = 0; /* 电平流的位置*/
-	char start = STOP_STATUS; /* -1 为初始态或停止态 */
+	int start = STOP_STATUS; /* -1 为初始态或停止态 */
 	int k;
 
 	struct timespec ts;
@@ -120,7 +120,7 @@ int run_process(struct signalProcess *sp)
 	clock_gettime(CLOCK_MONOTONIC,&last_ts);
 
 	set_timer(sp->fd, sp->sampleFreq_Hz);
-	sp->curCO = 0;
+	sp->curCinva = 0;
 
 	while(1){
 		if(modifyFlag){
@@ -158,27 +158,26 @@ int run_process(struct signalProcess *sp)
 			//		sp->transmit_cb((char *)sp->level_strem, (sp->transmit_pos / sp->sampleFreq_Hz) * sizeof(int));
 			//		start = 0;
 			//	}
-				
-				if(sp->curCO < 7){
+				if(sp->curCinva < 7){
 
-				}else if( sp->curCO >= (sp->minCZ * 7)){
+				}else if( sp->curCinva >= (sp->minCZ * 7)){
 					/*启动传输*/	
 					int cbit = 0;
 					int cb = 0;
-				printf("....(%d)\n", sp->minCZ);
-					cbit = start % sizeof(char);
+					cbit = start % 8;
 					if(cbit != 0){
-						cbit = sizeof(char) - cbit;
+						cbit = 8 - cbit;
 						// 插入补齐 TODO: 插值算法需要优化
 						for(cb = 0; cb < cbit; cb++)
 							stream_fifo_write(sp, INVALID_LEVEL);
 					}
-					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / sizeof(char));
+					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / 8);
 					start = 0;
 				}
 				
 			}
-			if(sp->verbose && (start > 0)){
+			//if(sp->verbose && (start > 0)){
+			if(sp->verbose){
 				clock_gettime(CLOCK_MONOTONIC,&ts);
 				runtime = (ts.tv_sec - last_ts.tv_sec) * 1000 + (ts.tv_nsec - last_ts.tv_nsec)/1000000;
 				last_ts = ts;
@@ -200,7 +199,6 @@ int run_process(struct signalProcess *sp)
 
 				printf("(%d)\n",runtime);
 			}
-
 
 		}
 		
@@ -224,9 +222,9 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 	int i = 0;
 	char l = v & 0x01;
 	if(l == INVALID_LEVEL)
-		sp->curCO++;
+		sp->curCinva++;
 	else
-		sp->curCO = 0;
+		sp->curCinva = 0;
 	for(i = 0; i < STREAM_MAX_SECONDS; i++){
 		char Hbit = (sp->level_strem[i] & 0x80000000) ? 1:0;
 		sp->level_strem[i] = (((sp->level_strem[i] & 0x7fffffff) << 1 ) | l);

@@ -14,6 +14,7 @@
 
 #include "pcm.h"
 #include "play.h"
+#include "process.h"
 
 
 /* program settings */
@@ -303,6 +304,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 }
 
 #else
+
 #include <fcntl.h>
 int init_pcm_play(struct pcmConf *pcm)
 {
@@ -347,54 +349,93 @@ void inline insert_point(char *p, int c)
 	int baseV = 0x80;
 	int i = 0;
 	for(i = 0; i< c; i++)
-		*(p+i) = 0x80 - 0x20 * cos(1000/(i+1));
+		*(p+i) = 0xff + 0x20 * cos(3.14 * i/1024);
 
 }
+
+
+void pcmPlay_test(struct pcmConf *g_pcmPlay, char buff[], int len)
+{
+	int ret;
+	FILE *fp;
+	fp=fopen("sos.wav","rb");
+	if(fp==NULL)
+	{
+		perror("open file failed:\n");
+		exit(1);
+	}
+
+	fseek(fp,58,SEEK_SET); //定位歌曲到数据区
+
+	while(1){
+		memset(g_pcmPlay->buffer,0,sizeof(g_pcmPlay->buffer));
+
+		ret = fread(g_pcmPlay->buffer, 1, g_pcmPlay->size, fp);
+		if(ret == 0)
+		{
+			printf("歌曲写入结束\n");
+			//fseek(fp,58,SEEK_SET); //定位歌曲到数据区
+			break;
+		}
+
+		ret=write(g_pcmPlay->handle, g_pcmPlay->buffer, g_pcmPlay->size);
+		if(ret==-1){
+			perror("Fail to play the sound!");
+			return;
+		}
+	}
+}
+
+
+
 void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 {
-	int *val;
-	int c = len / sizeof(int);
 	int i = 0;
-	char *p = buff + ( c -1 ) * sizeof(int);
 	int k;
 	int ret;
+	int cbit = 0;
+	int bi = ipcmPlay->frequency / TRIG_FREQ;
 
-	int bi = ipcmPlay->frequency / 32;
+	bi*=40;  /* test ... slow 20*/
 
 	char *pb = ipcmPlay->buffer;
 	memset(pb,0,sizeof(ipcmPlay->size));
 
-	for(i=c; i>0; i--){
-		if(i < c){
-			p = p - sizeof(int);
-		}
-		val = (int *)p;
-		// do play
-		for( k= 0; k < 32; k++){
-			if( *val & 0x80000000){
-				memset(pb, 0x00, bi);  /* 250 是插值比*/
-			}else{
-				//memset(pb, 0x80, bi);  /* 250 是插值比*/
-				insert_point(pb, bi);
+	for(i = len-1; i >= 0; i--){
+		if( (cbit + (8 * bi)) > ipcmPlay->size){
+			/* 防止数组越界，需要先清空数据 */
+			ret=write(ipcmPlay->handle, ipcmPlay->buffer, cbit);
+			if(ret==-1){
+				perror("Fail to play the sound!");
+				return;
 			}
-			*val =(*val & 0x7fffffff) << 1;
-			pb+=bi;
-		}
-#if 1
-		//printf("?%x:%x  %x : %d \n", ipcmPlay->handle, ipcmPlay->buffer , *(ipcmPlay->buffer + 10), bi );
+			pb = ipcmPlay->buffer;
+			cbit = 0;
 
-		//向端口写入，播放
-		ret=write(ipcmPlay->handle, ipcmPlay->buffer, ipcmPlay->frequency);
+		}
+		for(k=7; k>=0; k--){
+			if((buff[i] & (1<<k)) == 0){
+				/* 有效电平 */
+				insert_point(pb, bi);
+				printf(".");
+			}else{
+				/* 无效电平或间隔 */
+				memset(pb, 0x00, bi);  /* 250 是插值比*/
+				printf("*");
+			}
+		}
+		cbit += (8 * bi);
+	}
+	printf("\n");
+	if(cbit != 0){
+		ret=write(ipcmPlay->handle, ipcmPlay->buffer, cbit);
 		if(ret==-1){
 			perror("Fail to play the sound!");
 			return;
 		}
 
-
-#endif
-		pb = ipcmPlay->buffer;
-
 	}
+
 
 }
 
