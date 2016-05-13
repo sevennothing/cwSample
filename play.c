@@ -53,25 +53,6 @@ int getSpaceTime(int c_rate, int w_rate) {
 	return t_space / 14;
 }
 
-/* morse-speak: */
-void dit(FILE *out) {
-	mark(hvox, cTime, out);
-	space(hvox, cTime, out);
-}
-void dah(FILE *out) {
-	mark(hvox, cTime * 3, out);
-	space(hvox, cTime, out);
-}
-void err(FILE *out) {
-}
-
-void cspace(FILE *out) {
-	space(hvox, sTime*2, out);
-}
-void wspace(FILE *out) {
-	space(hvox, sTime*4, out);
-	fflush(out);
-}
 
 void setupVoice(int hz, int amp) {
 	/* freq, amplitude, zero, sample rate */
@@ -139,7 +120,7 @@ int init_pcm_play(struct pcmConf *pcm)
 		perror("\nsnd_pcm_hw_params_set_channels:");
 		exit(1);
 	}
-	val = pcm->frequency;
+	val = pcm->sampleFrequency;
 	rc=snd_pcm_hw_params_set_rate_near(pcm->handle, params, &val, &dir); //设置>频率
 	if(rc<0)
 	{
@@ -319,7 +300,7 @@ int init_pcm_play(struct pcmConf *pcm)
 		return -1;
 	}
 
-	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_RATE,&pcm->frequency);
+	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_RATE,&pcm->sampleFrequency);
 	if(ret==-1){
 		perror("error from SOUND_PCM_WRITE_RATE ioctl");
 		return -1;
@@ -333,7 +314,8 @@ int init_pcm_play(struct pcmConf *pcm)
 
 	pcm->buffer =(char*)malloc(pcm->size);
 
-	
+	//setupVoice(pcm->cwFrequency, pcm->volume*127/100);
+
 	return 0;
 }
 
@@ -343,16 +325,79 @@ void free_pcm_play(struct pcmConf *pcm)
 
 	free(pcm->buffer);
 }
-
-void inline insert_point(char *p, int c)
+#if 0
+void inline insert_point(struct pcmConf *ipcmPlay, char mode, char *p, int c)
 {
+	float tv,tv2;
 	int baseV = 0x80;
-	int i = 0;
-	for(i = 0; i< c; i++)
-		*(p+i) = 0xff + 0x20 * cos(3.14 * i/1024);
-
+	int pos = 0;
+	float gain = 1;
+	for(pos = 0; pos < c; pos++){
+		if(mode == VALID_LEVEL){
+			gain = 0.5 + (-0.5 * cos((PI * pos)/ (ipcmPlay->sampleFrequency / 1000) * 10));
+			tv = gain * sin((float)pos * TWOPI * (float)ipcmPlay->cwFrequency / ipcmPlay->sampleFrequency);
+			tv2 = (ipcmPlay->volume * tv) + baseV;
+		}else{
+			gain = 0.5 + (0.5 * cos((PI * pos) / (ipcmPlay->sampleFrequency / 1000) * 10)); 
+			tv = gain * sin((float)pos * TWOPI * (float) ipcmPlay->sampleFrequency);
+			tv2 = (ipcmPlay->volume * tv) + baseV;
+		}
+		*(p+pos) = (unsigned char)tv2;
+	}
 }
+#endif
+void inline insert_point(struct pcmConf *ipcmPlay, char mode, char *p, int c, int cValid, int cInvalid)
+{
+	float tv,tv2;
+	int baseV = 0x80;
+	int pos = 0;
+	int riseSample = c / 10;
+	int fallSample = c / 10;
+	float gain = 1;
+	float freq = (float)ipcmPlay->cwFrequency / ipcmPlay->sampleFrequency;
+#if 0
+	if(((cValid == 1) && (mode == VALID_LEVEL)) || ((cInvalid == 1) && (mode == INVALID_LEVEL)))
+		for(pos = 0; pos < riseSample; pos++){
+			if(mode == VALID_LEVEL){
+				/* 10% 上升沿 */
+				gain = 0.5 + (-0.5 * cos((PI * pos)/riseSample));
+			}else{
+				/* 10% 下降沿 */
+				gain = 0.5 + (0.5 * cos((PI * pos)/fallSample));
+			}
+			tv = gain * sin((float)pos * TWOPI * freq);
+			tv2 = (ipcmPlay->volume * tv) + baseV;
+			*(p+pos) = (unsigned char)tv2;
 
+			// 90% 保持  */
+			for(pos = riseSample; pos < c; pos++){
+				if(mode == VALID_LEVEL){
+					tv = 1.0 * sin((float)pos * TWOPI * freq);
+					tv2 = (ipcmPlay->volume * tv) + baseV;
+				}else {
+					tv2 = baseV;
+				}
+				*(p+pos) = (unsigned char)tv2;
+			}
+		}
+	else
+#endif
+	{
+		int wavePos = 0; 
+		wavePos = (cValid - 1) * c;
+		for(pos = 0; pos < c; pos++){
+			if(mode == VALID_LEVEL){
+				tv = 1.0 * sin((float)wavePos * TWOPI * freq);
+				tv2 = (ipcmPlay->volume * tv) + baseV;
+				wavePos++;
+			}else {
+				tv2 = baseV;
+			}
+			*(p+pos) = (unsigned char)tv2;
+		}
+	}
+	
+}
 
 void pcmPlay_test(struct pcmConf *g_pcmPlay, char buff[], int len)
 {
@@ -394,12 +439,17 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	int k;
 	int ret;
 	int cbit = 0;
-	int bi = ipcmPlay->frequency / TRIG_FREQ;
+	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
 
-	bi*=40;  /* test ... slow 20*/
+	int cValid = 0;
+	int cInvalid = 0;
+
+	bi*=2;  /* test ... slow 20*/
 
 	char *pb = ipcmPlay->buffer;
 	memset(pb,0,sizeof(ipcmPlay->size));
+
+
 
 	for(i = len-1; i >= 0; i--){
 		if( (cbit + (8 * bi)) > ipcmPlay->size){
@@ -416,11 +466,15 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 		for(k=7; k>=0; k--){
 			if((buff[i] & (1<<k)) == 0){
 				/* 有效电平 */
-				insert_point(pb, bi);
+				cValid++;
+				cInvalid = 0;
+				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
 				printf(".");
 			}else{
 				/* 无效电平或间隔 */
-				memset(pb, 0x00, bi);  /* 250 是插值比*/
+				cValid = 0;
+				cInvalid++;
+				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
 				printf("*");
 			}
 		}

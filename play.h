@@ -18,7 +18,7 @@ struct pcmConf
 	snd_pcm_t* handle; //PCI设备句柄
 	int bit;	 // 采样位数
 	int channels;
-	int frequency;
+	int sampleFrequency;
 	int size;
 	int datablock;
 	char *buffer;
@@ -37,9 +37,12 @@ struct pcmConf
 {
 	int handle;
 	int bit;
-	int frequency;
+	int sampleFrequency; /* 采样频率  */
 	int size;
 	char *buffer;
+
+	int cwFrequency; /* CW 载频  40 ~ 3200Hz ; 该值不能大于sampleFrequency 的1/4*/
+	int volume;       /* 载频幅度  0 ~ 100 */
 
 
 };
@@ -49,32 +52,16 @@ void free_pcm_play(struct pcmConf *pcm);
 void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len);
 #endif
 
+
 //#define SAMPLERATE 8000
 #define SAMPLERATE 44100
 
 #define RISETIME 10
 #define FALLTIME 10
-//
-///* tbase (dit time in samples) is 1200 msec * 8 samples per msec */
-////#define tbase 9600 // for 8000 Samples per second
-//
-///* 900 Hz */
-#define PITCH 800
-/* volume on 0..100 percent */
-#define VOLUME 70
-//
-///* rates (character, word) for various speeds (slow|med|fast|extra) */
-//#define CSLOW 15
-//#define WSLOW 5
-//#define CMED 18
-//#define WMED 12
-//#define CFAST 18
-//#define WFAST 18
-//#define CEXTRA 20
-//#define WEXTRA 20
 
+#define PI 3.14159           
+#define TWOPI 6.28
 
-
-//void setupVoice(int hz, int amp);
+void setupVoice(int hz, int amp);
 
 #endif

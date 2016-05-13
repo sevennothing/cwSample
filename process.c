@@ -139,9 +139,8 @@ int run_process(struct signalProcess *sp)
 
 		if(start > 0){
 			stream_fifo_write(sp, level);
-			if((start % 5) == 0){ /*每采样5个点进行一次查找*/
+			if((start % 8) == 0){ /*每采样8个点进行一次查找*/
 				find_transmit_point(sp);	
-
 			}
 
 			if(sp->decode_enable && (sp->decode_process != NULL)){
@@ -158,7 +157,7 @@ int run_process(struct signalProcess *sp)
 			//		sp->transmit_cb((char *)sp->level_strem, (sp->transmit_pos / sp->sampleFreq_Hz) * sizeof(int));
 			//		start = 0;
 			//	}
-				printf(">>>> %d : %d : %d\n", start, sp->curCinva, sp->minCZ);
+			//	printf(">>>> %d : %d : %d\n", start, sp->curCinva, sp->minCZ);
 				if(sp->curCinva < 7){
 
 				}else if( sp->curCinva >= (sp->minCZ * 7)){

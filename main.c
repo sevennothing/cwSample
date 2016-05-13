@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 
 
 	/* 启用软件消除抖动 */
-	cwSp->dithering_pass_enable = 1;
+//	cwSp->dithering_pass_enable = 1;
 
 	//modify_signal_process(cwSp);
 	
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 #ifndef  SOUND_CARD
 		g_pcmPlay.bit = 8;
 		g_pcmPlay.channels = 1;
-		g_pcmPlay.frequency = 400;
+		g_pcmPlay.sampleFrequency = 400;
 		g_pcmPlay.datablock = 1;
 
 		
@@ -162,26 +162,31 @@ int main(int argc, char **argv)
 		printf("PCM confi:\n");
 		printf("  采样位数:%d\n", g_pcmPlay.bit);
 		printf("  通道数:%d\n", g_pcmPlay.channels);
-		printf("  采样频率:%d\n", g_pcmPlay.frequency);
+		printf("  采样频率:%d\n", g_pcmPlay.sampleFrequency);
 		printf("  datablock:%d\n", g_pcmPlay.datablock);
 		printf("  frames:%d\n", g_pcmPlay.frames);
 		printf("  size:%d\n", g_pcmPlay.size);
 		printf("... %x\n", g_pcmPlay.buffer);
 #else
 		g_pcmPlay.bit = 8;
-		//g_pcmPlay.frequency = 8000;
-		//g_pcmPlay.size = 8192;
+		g_pcmPlay.sampleFrequency = 8000;
+		g_pcmPlay.size = 8192;
 		
-		g_pcmPlay.frequency = 1024; /* 必须设置TRIG_FREQ 的整数倍 */
-		g_pcmPlay.size = 1024;
+		//g_pcmPlay.sampleFrequency = 1024; /* 必须设置TRIG_FREQ 的整数倍 */
+		//g_pcmPlay.size = 1024;
+
+		g_pcmPlay.cwFrequency = 800;
+		g_pcmPlay.volume   =  70;
 		
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM confi:\n");
 		printf("  采样位数:%d\n", g_pcmPlay.bit);
-		printf("  采样频率:%d\n", g_pcmPlay.frequency);
+		printf("  采样频率:%d\n", g_pcmPlay.sampleFrequency);
 		printf("  size:%d\n", g_pcmPlay.size);
+		printf("  CW-Freq:%d\n", g_pcmPlay.cwFrequency);
+		printf("  CW-AMP:%d\n", g_pcmPlay.volume);
 
-		if(g_pcmPlay.frequency % TRIG_FREQ){
+		if(g_pcmPlay.sampleFrequency % TRIG_FREQ){
 			printf("warning: player sample frequency can't be divisible by TRIGE_FREQ(%d)\n", TRIG_FREQ);
 		}
 
