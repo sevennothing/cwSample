@@ -151,13 +151,6 @@ int run_process(struct signalProcess *sp)
 
 			if(sp->transmit_enable && sp->transmit_cb != NULL){
 				//TODO: 网络传输采样信息
-				
-			//	if(start == sp->transmit_pos){
-			//		/*启动传输*/	
-			//		sp->transmit_cb((char *)sp->level_strem, (sp->transmit_pos / sp->sampleFreq_Hz) * sizeof(int));
-			//		start = 0;
-			//	}
-			//	printf(">>>> %d : %d : %d\n", start, sp->curCinva, sp->minCZ);
 				if(sp->curCinva < 7){
 
 				}else if( sp->curCinva >= (sp->minCZ * 7)){

@@ -1,10 +1,24 @@
 
 PREFIX=/usr/local
 
-CC=arm-linux-gcc -DSOUND_CARD
+#PLATFORM= "arm"
+
+ifeq ($(PLATFORM), "arm")
+CC=arm-linux-gcc
+else
+SOUND_CARD= "alas"
+endif
 
 CFLAGS+=-DENABLE_DEUG_SIM
 CFLAGS+=-DSELF_TEST_FOR_PIPE
+
+DFLAGS+=-lm -lrt -lpthread
+
+
+ifeq ($(SOUND_CARD), "alas")
+CFLAGS+=-DUSE_ALAS_DRIVER
+DFLAGS+=-lasound
+endif
 
 ALL: cws
 
@@ -12,8 +26,7 @@ install: ALL
 	        install -sc cws ${PREFIX}/bin
 
 cws: cw_gpio.o main.o trans.o process.o pcm.o play.o
-	        #${CC} ${CFLAGS} -o cws -lrt -lm -lasound $^
-	        ${CC} ${CFLAGS} -o cws -lrt -lm  $^
+	        ${CC} ${CFLAGS} -o cws ${DFLAGS}  $^
 
 
 cw_gpio.o: cw_gpio.c cw_gpio.h

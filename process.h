@@ -18,7 +18,8 @@ enum tmode {
 		RTC_MODE,
 		OTHER_MODE
 };
-#define  TRIG_FREQ   (32)  /* 触发频率设置为32Hz*/
+//#define  TRIG_FREQ   (32)  /* 触发频率设置为32Hz*/
+#define  TRIG_FREQ   (16)  /* 触发频率设置为32Hz*/
 
 #define  INVALID_LEVEL  (1)   /* 无效电平值 */
 #define  VALID_LEVEL  (0)     /* 有效电平值 */

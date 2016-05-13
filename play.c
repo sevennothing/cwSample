@@ -11,60 +11,157 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
-#include "pcm.h"
+
 #include "play.h"
 #include "process.h"
 
+#include <pthread.h>
 
-/* program settings */
-int pcm = 1;
-int hvox = 0;
 
-/* character time, space time (in samples) */
-int cTime, sTime;
-/* sample rate (samples per second) */
-int sample_rate=44100;
+/***对信号量数组semnum编号的信号量做P操作***/
+int P(int semid, int semnum)
+{
 
-/* get the dit-time for characters */
-int getCharacterTime(int c_rate) {
-	// dit time is 1200 msec at 1 WPM
-	// this returns the number of samples per dit
-	// at the desired character rate
-	float tbase = sample_rate/1000.0 * 1200;
-	return (int)(tbase/c_rate);
+	struct sembuf sops={semnum,-1, SEM_UNDO};
+
+	return (semop(semid,&sops,1));
+
 }
 
-/* get the dit-time for space between characters */
-int getSpaceTime(int c_rate, int w_rate) {
-	/* NONB helped with this section. Thanks Nate! */
-	int t_total;
-	int t_chars;
-	int t_space;
+/***对信号量数组semnum编号的信号量做V操作***/
+int V(int semid, int semnum)
+{
 
-	if (w_rate < 5) w_rate = 5;
-	if (w_rate >= c_rate) return getCharacterTime(c_rate);
+	struct sembuf sops={semnum,+1, SEM_UNDO};
 
-	/* spaces take longer but how much longer? */
-	t_total = getCharacterTime(w_rate) * 50;
-	t_chars = getCharacterTime(c_rate) * 36;
+	return (semop(semid,&sops,1));
 
-	t_space = t_total - t_chars;
-	return t_space / 14;
 }
 
 
-void setupVoice(int hz, int amp) {
-	/* freq, amplitude, zero, sample rate */
-	hvox = voiceFactory(hz, amp, 128, sample_rate);
-	setRisetime(hvox, RISETIME);
-	setFalltime(hvox, FALLTIME);
+void inline insert_point(struct pcmConf *ipcmPlay, char mode, char *p, int c, int cValid, int cInvalid)
+{
+	float tv,tv2;
+	int baseV = 0x80;
+	int pos = 0;
+	int riseSample = c / 100;
+	int fallSample = c / 100;
+	float gain = 1;
+	float freq = (float)ipcmPlay->cwFrequency / ipcmPlay->sampleFrequency;
+
+	if(((cValid == 1) && (mode == VALID_LEVEL)) || ((cInvalid == 1) && (mode == INVALID_LEVEL))){
+		for(pos = 0; pos < riseSample; pos++){
+			if(mode == VALID_LEVEL){
+				/* 50% 上升沿 */
+				gain = 0.5 + (-0.5 * cos((PI * pos)/riseSample));
+			}else{
+				/* 50% 下降沿 */
+				gain = 0.5 + (0.5 * cos((PI * pos)/fallSample));
+			}
+			tv = gain * sin((float)pos * TWOPI * freq);
+			tv2 = (ipcmPlay->volume * tv) + baseV;
+			*(p+pos) = (unsigned char)tv2;
+
+			// 90% 保持  */
+			for(pos = riseSample; pos < c; pos++){
+				if(mode == VALID_LEVEL){
+					tv = 1.0 * sin((float)pos * TWOPI * freq);
+					tv2 = (ipcmPlay->volume * tv) + baseV;
+				}else {
+					tv2 = baseV;
+				}
+				*(p+pos) = (unsigned char)tv2;
+			}
+		}
+	}else{
+		int wavePos = 0; 
+		wavePos = (cValid - 1) * c;
+		for(pos = 0; pos < c; pos++){
+			if(mode == VALID_LEVEL){
+				tv = 1.0 * sin((float)wavePos * TWOPI * freq);
+				tv2 = (ipcmPlay->volume * tv) + baseV;
+				wavePos++;
+			}else {
+				tv2 = baseV;
+			}
+			*(p+pos) = (unsigned char)tv2;
+		}
+	}
+	
 }
 
 
+//
+
+struct threadParam {
+	struct pcmConf *pcm;
+	int len;
+	char *pbuf;
+};
+
+static void playCW(void *param)
+{
+	struct threadParam *tparam = (struct threadParam *)param;
+	struct pcmConf *ipcmPlay = tparam->pcm;
+	int len = tparam->len;
+	char *pbuf = tparam->pbuf;
+	int ret;
+
+#ifdef USE_ALAS_DRIVER
+	while(ret = (snd_pcm_writei(ipcmPlay->handle, pbuf, len) < 0))
+	{
+		usleep(2000); 
+		if (ret == -EPIPE)
+		{
+			/* EPIPE means underrun */
+			fprintf(stderr, "underrun occurred\n");
+			//完成硬件参数设置，使设备准备好 
+			snd_pcm_prepare(ipcmPlay->handle);
+		}
+		else if (ret < 0)
+		{
+			fprintf(stderr,
+					"error from writei: %s\n",
+					snd_strerror(ret));
+		}
+	}
+#else
+	ret = write(ipcmPlay->handle, pbuf, len);
+	if(ret==-1){
+		perror("Fail to play the sound!");
+		free(pbuf);
+	}
+#endif
+
+	free(pbuf);
+	ret = V(ipcmPlay->semid, 0);
+
+}
+
+/* 播放较慢且阻塞，插值耗时，将二者分离*/
+void fork_play(struct pcmConf *ipcmPlay, int len)
+{
+	pid_t pid;
+	pthread_t tid;
+	int ret;
+
+	struct threadParam tparam;
+	tparam.pcm = ipcmPlay;
+	tparam.len = len;
+	tparam.pbuf = malloc(len);
+	memcpy(tparam.pbuf, ipcmPlay->buffer, len);
+
+	ret = P(ipcmPlay->semid, 0);
+
+	ret = pthread_create(&tid, NULL, (void *)playCW, &tparam);
+
+	return;
+}
 
 
-#ifndef  SOUND_CARD
+#ifdef  USE_ALAS_DRIVER
 /*****************************  alas  Driver  ******************************/
 int init_pcm_play(struct pcmConf *pcm)
 {
@@ -135,8 +232,7 @@ int init_pcm_play(struct pcmConf *pcm)
 		exit(1);
 	}
 
-	rc=snd_pcm_hw_params_get_period_size(params, &(pcm->frames), &dir); /*获取周期
-																   长度*/
+	rc=snd_pcm_hw_params_get_period_size(params, &(pcm->frames), &dir); /*获取周期长度*/
 	if(rc<0)
 	{
 		perror("\nsnd_pcm_hw_params_get_period_size:");
@@ -146,6 +242,19 @@ int init_pcm_play(struct pcmConf *pcm)
 	pcm->size = pcm->frames * (pcm->datablock); /*4 代表数据快长度*/
 
 	pcm->buffer =(char*)malloc(pcm->size);
+
+	//创建一个命名信号量
+	pcm->semid=semget(SEM_KEY,1,IPC_CREAT | 0666);//创建了一个权限为666的信号量
+	pcm->semVal.val = 1;
+
+	/***对0号信号量设置初始值***/
+	ret =semctl(pcm->semid,0,SETVAL,pcm->semVal);
+
+	if (ret < 0 ){
+		perror("ctl sem error");
+		semctl(pcm->semid, 0, IPC_RMID,pcm->semVal);
+		return -1 ;
+	}
 
 
 	return 0;
@@ -157,143 +266,72 @@ void free_pcm_play(struct pcmConf *pcm)
 	snd_pcm_drain(pcm->handle);
 	snd_pcm_close(pcm->handle);
 	free(pcm->buffer);
+
+	semctl(pcm->semid, 0, IPC_RMID,pcm->semVal);
+
 }
 
-
-/***************************************************************************/
-
-void pcmPlay2(struct pcmConf *g_pcmPlay, char buff[], int len)
-{
-	int ret,i;
-		FILE *fp;
-		fp=fopen("sos.wav","rb");
-		if(fp==NULL)
-		{
-			perror("open file failed:\n");
-			exit(1);
-		}
-
-		fseek(fp,58,SEEK_SET); //定位歌曲到数据区
-
-		while(1){
-			//memset(g_pcmPlay->buffer, 0x8,g_pcmPlay.size);
-			memset(g_pcmPlay->buffer,0,sizeof(g_pcmPlay->buffer));
-
-			ret = fread(g_pcmPlay->buffer, 1, g_pcmPlay->size, fp);
-			if(ret == 0)
-			{
-				printf("歌曲写入结束\n");
-				//fseek(fp,58,SEEK_SET); //定位歌曲到数据区
-				break;
-			}
-
-			printf("?%x:%x  %x : %d \n", g_pcmPlay->handle, g_pcmPlay->buffer , *(g_pcmPlay->buffer + 10), g_pcmPlay->frames);
-			for(i=0; i< g_pcmPlay->size; i++){
-				if(g_pcmPlay->buffer[i] & 0xff != 0x80)
-					g_pcmPlay->buffer[i] = 0xff;
-				else
-					g_pcmPlay->buffer[i] = 0x80;
-				printf("%02x ",(unsigned char)*(g_pcmPlay->buffer + i));
-			}
-			printf("\n");
-
-
-			// 写音频数据到PCM设备 
-			while(ret = snd_pcm_writei(g_pcmPlay->handle, g_pcmPlay->buffer, g_pcmPlay->frames)<0)
-		//		              while(ret = snd_pcm_writei(g_pcmPlay->handle, g_pcmPlay->buffer, 32)<0)
-			{
-				usleep(2000); 
-				if (ret == -EPIPE)
-				{
-					/* EPIPE means underrun */
-					fprintf(stderr, "underrun occurred\n");
-					//完成硬件参数设置，使设备准备好 
-					snd_pcm_prepare(g_pcmPlay->handle);
-				}
-				else if (ret < 0)
-				{
-					fprintf(stderr,
-							"error from writei: %s\n",
-							snd_strerror(ret));
-				}
-
-			}
-			break;
-//			usleep(100000);
-		}
-}
 
 void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 {
 	int *val;
-	int c = len / sizeof(int);
 	int i = 0;
-	char *p = buff + ( c -1 ) * sizeof(int);
 	int k;
 	int ret;
+	int cValid = 0;
+	int cInvalid = 0;
+	int cbit = 0;
+	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
 
 	char *pb = ipcmPlay->buffer;
 	memset(pb,0,sizeof(ipcmPlay->size));
 
+	for(i = len-1; i >= 0; i--){
+		for(k=7; k>=0; k--){
+			if( (cbit + bi) > ipcmPlay->size){
+				/* 防止数组越界，需要先清空数据 */
+				fork_play(ipcmPlay, cbit);
+				pb = ipcmPlay->buffer;
+				cbit = 0;
+			}
 
-	for(i=c; i>0; i--){
-		if(i < c){
-			p = p - sizeof(int);
-		}
-		val = (int *)p;
-		// do play
-		for( k= 0; k < 32; k++){
-			if( *val & 0x80000000){
-				memset(pb, 0xff, 52);  /* 250 是插值比*/
-				//*pb = 0xff;
+			if((buff[i] & (1<<k)) == 0){
+				/* 有效电平 */
+				cValid++;
+				cInvalid = 0;
+				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
+				printf(".");
 			}else{
-				memset(pb, 0x80, 52);  /* 250 是插值比*/
-				//*pb = 0x80;
+				/* 无效电平或间隔 */
+				cValid = 0;
+				cInvalid++;
+				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
+				printf("*");
 			}
-			*val =(*val & 0x7fffffff) << 1;
-		//	pb++;
-			pb+=52;
-		}
-#if 1
-		//memset(ipcmPlay->buffer, 0xaa, ipcmPlay->size);
-		printf("?%x:%x  %x : %d \n", ipcmPlay->handle, ipcmPlay->buffer , *(ipcmPlay->buffer + 10), ipcmPlay->frames);
 
-		// 写音频数据到PCM设备 
-		while(ret = snd_pcm_writei(ipcmPlay->handle, ipcmPlay->buffer, ipcmPlay->frames)<0)
-//		while(ret = snd_pcm_writei(ipcmPlay->handle, ipcmPlay->buffer, 32)<0)
-		{
-			usleep(2000); 
-			if (ret == -EPIPE)
-			{
-				/* EPIPE means underrun */
-				fprintf(stderr, "underrun occurred\n");
-				//完成硬件参数设置，使设备准备好 
-				snd_pcm_prepare(ipcmPlay->handle);
-			}
-			else if (ret < 0)
-			{
-				fprintf(stderr,
-						"error from writei: %s\n",
-						snd_strerror(ret));
-			}
+			cbit += bi;
+			pb += bi;
 		}
-#endif
-		pb = ipcmPlay->buffer;
+	}
 
+	printf("\n");
+	if(cbit != 0){
+		fork_play(ipcmPlay, cbit);
 	}
 
 }
 
+/************************* alas end  *************************************************/
 #else
 
-#include <fcntl.h>
 int init_pcm_play(struct pcmConf *pcm)
 {
 
 	int ret;
 	
 	//打开声卡设备，并设置声卡播放参数，这些参数必须与声音文件参数一致
-	pcm->handle=open("/dev/audio", O_WRONLY);
+	//pcm->handle=open("/dev/audio", O_WRONLY);
+	pcm->handle=open("/dev/dsp", O_WRONLY);
 
 	if(pcm->handle == -1){
 		perror("open Audio_Device fail");
@@ -314,7 +352,18 @@ int init_pcm_play(struct pcmConf *pcm)
 
 	pcm->buffer =(char*)malloc(pcm->size);
 
-	//setupVoice(pcm->cwFrequency, pcm->volume*127/100);
+	//创建一个命名信号量
+	pcm->semid=semget(SEM_KEY,1,IPC_CREAT | 0666);//创建了一个权限为666的信号量
+	pcm->semVal.val = 1;
+
+	/***对0号信号量设置初始值***/
+	ret =semctl(pcm->semid,0,SETVAL,pcm->semVal);
+
+	if (ret < 0 ){
+		perror("ctl sem error");
+		semctl(pcm->semid, 0, IPC_RMID,pcm->semVal);
+		return -1 ;
+	}
 
 	return 0;
 }
@@ -324,113 +373,8 @@ void free_pcm_play(struct pcmConf *pcm)
 	close(pcm->handle);
 
 	free(pcm->buffer);
+	semctl(pcm->semid, 0, IPC_RMID,pcm->semVal);
 }
-#if 0
-void inline insert_point(struct pcmConf *ipcmPlay, char mode, char *p, int c)
-{
-	float tv,tv2;
-	int baseV = 0x80;
-	int pos = 0;
-	float gain = 1;
-	for(pos = 0; pos < c; pos++){
-		if(mode == VALID_LEVEL){
-			gain = 0.5 + (-0.5 * cos((PI * pos)/ (ipcmPlay->sampleFrequency / 1000) * 10));
-			tv = gain * sin((float)pos * TWOPI * (float)ipcmPlay->cwFrequency / ipcmPlay->sampleFrequency);
-			tv2 = (ipcmPlay->volume * tv) + baseV;
-		}else{
-			gain = 0.5 + (0.5 * cos((PI * pos) / (ipcmPlay->sampleFrequency / 1000) * 10)); 
-			tv = gain * sin((float)pos * TWOPI * (float) ipcmPlay->sampleFrequency);
-			tv2 = (ipcmPlay->volume * tv) + baseV;
-		}
-		*(p+pos) = (unsigned char)tv2;
-	}
-}
-#endif
-void inline insert_point(struct pcmConf *ipcmPlay, char mode, char *p, int c, int cValid, int cInvalid)
-{
-	float tv,tv2;
-	int baseV = 0x80;
-	int pos = 0;
-	int riseSample = c / 10;
-	int fallSample = c / 10;
-	float gain = 1;
-	float freq = (float)ipcmPlay->cwFrequency / ipcmPlay->sampleFrequency;
-#if 0
-	if(((cValid == 1) && (mode == VALID_LEVEL)) || ((cInvalid == 1) && (mode == INVALID_LEVEL)))
-		for(pos = 0; pos < riseSample; pos++){
-			if(mode == VALID_LEVEL){
-				/* 10% 上升沿 */
-				gain = 0.5 + (-0.5 * cos((PI * pos)/riseSample));
-			}else{
-				/* 10% 下降沿 */
-				gain = 0.5 + (0.5 * cos((PI * pos)/fallSample));
-			}
-			tv = gain * sin((float)pos * TWOPI * freq);
-			tv2 = (ipcmPlay->volume * tv) + baseV;
-			*(p+pos) = (unsigned char)tv2;
-
-			// 90% 保持  */
-			for(pos = riseSample; pos < c; pos++){
-				if(mode == VALID_LEVEL){
-					tv = 1.0 * sin((float)pos * TWOPI * freq);
-					tv2 = (ipcmPlay->volume * tv) + baseV;
-				}else {
-					tv2 = baseV;
-				}
-				*(p+pos) = (unsigned char)tv2;
-			}
-		}
-	else
-#endif
-	{
-		int wavePos = 0; 
-		wavePos = (cValid - 1) * c;
-		for(pos = 0; pos < c; pos++){
-			if(mode == VALID_LEVEL){
-				tv = 1.0 * sin((float)wavePos * TWOPI * freq);
-				tv2 = (ipcmPlay->volume * tv) + baseV;
-				wavePos++;
-			}else {
-				tv2 = baseV;
-			}
-			*(p+pos) = (unsigned char)tv2;
-		}
-	}
-	
-}
-
-void pcmPlay_test(struct pcmConf *g_pcmPlay, char buff[], int len)
-{
-	int ret;
-	FILE *fp;
-	fp=fopen("sos.wav","rb");
-	if(fp==NULL)
-	{
-		perror("open file failed:\n");
-		exit(1);
-	}
-
-	fseek(fp,58,SEEK_SET); //定位歌曲到数据区
-
-	while(1){
-		memset(g_pcmPlay->buffer,0,sizeof(g_pcmPlay->buffer));
-
-		ret = fread(g_pcmPlay->buffer, 1, g_pcmPlay->size, fp);
-		if(ret == 0)
-		{
-			printf("歌曲写入结束\n");
-			//fseek(fp,58,SEEK_SET); //定位歌曲到数据区
-			break;
-		}
-
-		ret=write(g_pcmPlay->handle, g_pcmPlay->buffer, g_pcmPlay->size);
-		if(ret==-1){
-			perror("Fail to play the sound!");
-			return;
-		}
-	}
-}
-
 
 
 void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
@@ -444,26 +388,21 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	int cValid = 0;
 	int cInvalid = 0;
 
-	bi*=2;  /* test ... slow 20*/
-
 	char *pb = ipcmPlay->buffer;
 	memset(pb,0,sizeof(ipcmPlay->size));
 
 
-
 	for(i = len-1; i >= 0; i--){
-		if( (cbit + (8 * bi)) > ipcmPlay->size){
-			/* 防止数组越界，需要先清空数据 */
-			ret=write(ipcmPlay->handle, ipcmPlay->buffer, cbit);
-			if(ret==-1){
-				perror("Fail to play the sound!");
-				return;
-			}
-			pb = ipcmPlay->buffer;
-			cbit = 0;
-
-		}
 		for(k=7; k>=0; k--){
+			if( (cbit + bi) > ipcmPlay->size){
+				/* 防止数组越界，需要先清空数据 */
+
+				fork_play(ipcmPlay, cbit);
+		
+				pb = ipcmPlay->buffer;
+				cbit = 0;
+			}
+
 			if((buff[i] & (1<<k)) == 0){
 				/* 有效电平 */
 				cValid++;
@@ -477,17 +416,15 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
 				printf("*");
 			}
+
+			cbit += bi;
+			pb += bi;
 		}
-		cbit += (8 * bi);
 	}
+
 	printf("\n");
 	if(cbit != 0){
-		ret=write(ipcmPlay->handle, ipcmPlay->buffer, cbit);
-		if(ret==-1){
-			perror("Fail to play the sound!");
-			return;
-		}
-
+		fork_play(ipcmPlay, cbit);
 	}
 
 

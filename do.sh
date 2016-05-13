@@ -7,6 +7,8 @@
 
 killall cws
 
+make clean
+
 make
 
 sudo chown root:root cws
