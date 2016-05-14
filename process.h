@@ -4,6 +4,7 @@
  * Author: caijun.Li    Date:2016-05-11
  * Description: 
  *    a). 采样率设为32HZ时，即每秒采样32个点。刚好为一个int 型数据。
+ *    b). STREAM_MAX_SECONDS, 一次流信息应当包含一个字，该值的大小将决定最低的PWM。
  * History:
  *     <author>        <time>        <desc>
  *
@@ -29,7 +30,7 @@ enum tmode {
 #define  MORSE_CHAR_MAX    (1024)
 #define  STREAM_BIT_MAX   (4000)
 //#define  STREAM_MAX_SECONDS (60)     /* 1min 数据*/
-#define  STREAM_MAX_SECONDS (20)     /* 1min 数据*/
+#define  STREAM_MAX_SECONDS (10)     /* 10S 数据, 该值将确定最低的PWM (6PWM)*/
 
 struct signalProcess {
 	enum tmode timer_mode;

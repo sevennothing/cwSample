@@ -112,6 +112,7 @@ static void playCW(void *param)
 	char *pbuf = tparam->pbuf;
 	int ret;
 
+	pthread_detach(pthread_self());
 #ifdef USE_ALAS_DRIVER
 	/* alsa 必须以帧为单位进行播放 */
 	while(ret = snd_pcm_writei(ipcmPlay->handle, pbuf, len) < 0)
@@ -167,16 +168,11 @@ void fork_play(struct pcmConf *ipcmPlay, int len, char last)
 	memcpy(tparam->pbuf, ipcmPlay->buffer, len);
 
 	ret = P(ipcmPlay->semid, 0);
-	if(tid > 0){
-		pthread_join(tid,NULL);
-		tid = 0;
-	}
-
-	//pthread_attr_init(&attr);
-	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED); // 分离线程
 
 	ret = pthread_create(&tid, NULL, (void *)playCW, tparam);
-	
+	if(ret != 0){
+		perror("create palyCW thread error");
+	}
 
 	return;
 }

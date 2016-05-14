@@ -238,7 +238,7 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 	}
 
 }
-
+//TODO: 更新算法，采用start开始
 static int find_transmit_point(struct signalProcess *sp)
 {
 	int i,j;

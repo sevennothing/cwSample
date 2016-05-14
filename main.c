@@ -29,6 +29,7 @@ int pipe_fd[2];
 
 //char sos[] = {1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,1,1,1,1};
 char sos[] = {0,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,1,1,0,1,0,1,0,1,1,1,1,1,1,1};
+//char sos[] = {0,0,1,1,0,0,1,1,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,1,1,1,1,0,0,1,1,0,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
 char sos_sim_dithering[] = {1,1,1,1,1,1,0,1,1,0,0,1,0,0,1,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,1,1,1};
 
@@ -127,7 +128,9 @@ int main(int argc, char **argv)
 
 
 	/* 启用软件消除抖动 */
-	//cwSp->dithering_pass_enable = 1;
+#ifdef ENABLE_DITHERING_PASS
+	cwSp->dithering_pass_enable = 1;
+#endif
 
 	//modify_signal_process(cwSp);
 	
@@ -211,7 +214,7 @@ int main(int argc, char **argv)
 #endif
 		while(1){
 
-			ret = recv_packet(buff, 8);
+			ret = recv_packet(buff, 1024);
 
 			if(ret > 0){
 				//cwSp->pcm_play(buff, ret);
