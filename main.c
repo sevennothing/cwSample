@@ -159,6 +159,8 @@ int main(int argc, char **argv)
 
 		g_pcmPlay.cwFrequency = 900;
 		g_pcmPlay.volume   =  70;
+
+		g_pcmPlay.frames = 500;
 		
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM config:\n");
@@ -173,8 +175,9 @@ int main(int argc, char **argv)
 		printf("  CW-AMP:%d\n", g_pcmPlay.volume);
 #else
 		g_pcmPlay.bit = 8;
+		g_pcmPlay.channels = 1;
 		g_pcmPlay.sampleFrequency = 8000;
-		g_pcmPlay.size = 4096;
+		g_pcmPlay.size = 4000;
 		
 		g_pcmPlay.cwFrequency = 900;
 		g_pcmPlay.volume   =  70;
@@ -182,8 +185,10 @@ int main(int argc, char **argv)
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM config:\n");
 		printf("  采样位数:%d\n", g_pcmPlay.bit);
+		printf("  通道数:%d\n", g_pcmPlay.channels);
 		printf("  采样频率:%d\n", g_pcmPlay.sampleFrequency);
 		printf("  size:%d\n", g_pcmPlay.size);
+		printf("  semid:%x\n", g_pcmPlay.semid);
 		printf("  CW-Freq:%d\n", g_pcmPlay.cwFrequency);
 		printf("  CW-AMP:%d\n", g_pcmPlay.volume);
 

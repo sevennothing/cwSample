@@ -3,6 +3,8 @@
  * FileName:play.c
  * Author: caijun.Li    Date:2016-05-12
  * Description:
+ *   可以使用2种传输算法，一种是补足整数字节进行传输，另一种是额外传输bit位长度。
+ *   见 PADDING_INVALID_CODE ; 默认采用传输Bit 位长度的方法。
  * History:
  *     <author>        <time>        <desc>
  *
@@ -110,41 +112,49 @@ static void playCW(void *param)
 	int ret;
 
 #ifdef USE_ALAS_DRIVER
-	while(ret = (snd_pcm_writei(ipcmPlay->handle, pbuf, len) < 0))
+	/* alsa 必须以帧为单位进行播放 */
+	while(ret = snd_pcm_writei(ipcmPlay->handle, pbuf, len) < 0)
 	{
-		usleep(2000); 
-		if (ret == -EPIPE)
-		{
+		//if (ret == -EPIPE)
+		//{
 			/* EPIPE means underrun */
-			fprintf(stderr, "underrun occurred\n");
+			fprintf(stderr, "underrun occurred(%d)\n",len);
 			//完成硬件参数设置，使设备准备好 
 			snd_pcm_prepare(ipcmPlay->handle);
-		}
-		else if (ret < 0)
-		{
-			fprintf(stderr,
-					"error from writei: %s\n",
-					snd_strerror(ret));
-		}
+		//}
+		//else if (ret < 0)
+	//	{
+	//		fprintf(stderr,
+	//				"error from writei: %s\n",
+	//				snd_strerror(ret));
+	//	}
 	}
+
 #else
 	ret = write(ipcmPlay->handle, pbuf, len);
 	if(ret==-1){
 		perror("Fail to play the sound!");
 		free(pbuf);
+		pthread_exit(0);
+		return;
 	}
+	/* 下面的代码用于在更改播放文件的参数时，播放掉缓冲区内的内容 */
+	//ret = ioctl(ipcmPlay->handle, SOUND_PCM_SYNC, 0);
+	//if (ret == -1)
+	//	perror("SOUND_PCM_SYNC ioctl failed");
 #endif
 
 	free(pbuf);
 	ret = V(ipcmPlay->semid, 0);
+	pthread_exit(0);
 
 }
 
 /* 播放较慢且阻塞，插值耗时，将二者分离*/
 void fork_play(struct pcmConf *ipcmPlay, int len)
 {
-	pid_t pid;
-	pthread_t tid;
+	pthread_t tid = 0;
+	pthread_attr_t attr;
 	int ret;
 
 	struct threadParam tparam;
@@ -154,6 +164,13 @@ void fork_play(struct pcmConf *ipcmPlay, int len)
 	memcpy(tparam.pbuf, ipcmPlay->buffer, len);
 
 	ret = P(ipcmPlay->semid, 0);
+	if(tid > 0){
+		pthread_join(tid,NULL);
+		tid = 0;
+	}
+
+	//pthread_attr_init(&attr);
+	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED); // 分离线程
 
 	ret = pthread_create(&tid, NULL, (void *)playCW, &tparam);
 
@@ -161,8 +178,107 @@ void fork_play(struct pcmConf *ipcmPlay, int len)
 }
 
 
+void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
+{
+	int i = 0;
+	int k;
+	int ret;
+	int cValid = 0;
+	int cInvalid = 0;
+	int cbit = 0;
+	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
+
+	char *pb = ipcmPlay->buffer;
+	memset(pb,0,sizeof(ipcmPlay->size));
+
+	/* 人为插入一个补足点，用于平滑初始音频 */
+	insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
+	printf("*");
+	pb+=bi;
+	cbit +=bi;
+
+#ifdef  PADDING_INVALID_CODE
+	for(i = len-1; i >= 0; i--){
+		for(k=7; k>=0; k--){
+			if( (cbit + bi) > ipcmPlay->size){
+				/* 防止数组越界，需要先清空数据 */
+				fork_play(ipcmPlay, cbit);
+				pb = ipcmPlay->buffer;
+				cbit = 0;
+			}
+
+			if((buff[i] & (1<<k)) == 0){
+				/* 有效电平 */
+				cValid++;
+				cInvalid = 0;
+				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
+				printf(".");
+			}else{
+				/* 无效电平或间隔 */
+				cValid = 0;
+				cInvalid++;
+				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
+				printf("*");
+			}
+
+			cbit += bi;
+			pb += bi;
+		}
+	}
+
+	printf("\n");
+	if(cbit != 0){
+		fork_play(ipcmPlay, cbit);
+	}
+#else
+	unsigned short bitLen = *(unsigned short *)buff;
+	char remainderBit = bitLen % 8;
+
+	for(i = len-1; i >=2; i--){
+		if(remainderBit > 0){
+			k = remainderBit - 1;
+			remainderBit = 0;
+		}else{
+			k = 7;
+		}
+		for(; k>=0; k--){
+			if( (cbit + bi) > ipcmPlay->size){
+				/* 防止数组越界，需要先清空数据 */
+				fork_play(ipcmPlay, cbit);
+				pb = ipcmPlay->buffer;
+				cbit = 0;
+			}
+
+			if((buff[i] & (1<<k)) == 0){
+				/* 有效电平 */
+				cValid++;
+				cInvalid = 0;
+				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
+				printf(".");
+			}else{
+				/* 无效电平或间隔 */
+				cValid = 0;
+				cInvalid++;
+				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
+				printf("*");
+			}
+
+			cbit += bi;
+			pb += bi;
+		}
+	}
+
+	printf("\n");
+	if(cbit != 0){
+		fork_play(ipcmPlay, cbit);
+	}
+
+
+#endif
+
+}
+
 #ifdef  USE_ALAS_DRIVER
-/*****************************  alas  Driver  ******************************/
 int init_pcm_play(struct pcmConf *pcm)
 {
 	int rc;
@@ -225,6 +341,15 @@ int init_pcm_play(struct pcmConf *pcm)
 		exit(1);
 	}
 
+	/* set period*/
+	val = pcm->frames;
+	rc=snd_pcm_hw_params_set_period_size_near(pcm->handle, params, &val, &dir);
+	if(rc<0)
+	{
+		perror("\nsnd_pcm_hw_params_set_period_size:");
+		exit(1);
+	}
+
 	rc = snd_pcm_hw_params(pcm->handle, params);
 	if(rc<0)
 	{
@@ -238,7 +363,7 @@ int init_pcm_play(struct pcmConf *pcm)
 		perror("\nsnd_pcm_hw_params_get_period_size:");
 		exit(1);
 	}
-
+	
 	pcm->size = pcm->frames * (pcm->datablock); /*4 代表数据快长度*/
 
 	pcm->buffer =(char*)malloc(pcm->size);
@@ -272,56 +397,6 @@ void free_pcm_play(struct pcmConf *pcm)
 }
 
 
-void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
-{
-	int *val;
-	int i = 0;
-	int k;
-	int ret;
-	int cValid = 0;
-	int cInvalid = 0;
-	int cbit = 0;
-	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
-
-	char *pb = ipcmPlay->buffer;
-	memset(pb,0,sizeof(ipcmPlay->size));
-
-	for(i = len-1; i >= 0; i--){
-		for(k=7; k>=0; k--){
-			if( (cbit + bi) > ipcmPlay->size){
-				/* 防止数组越界，需要先清空数据 */
-				fork_play(ipcmPlay, cbit);
-				pb = ipcmPlay->buffer;
-				cbit = 0;
-			}
-
-			if((buff[i] & (1<<k)) == 0){
-				/* 有效电平 */
-				cValid++;
-				cInvalid = 0;
-				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
-				printf(".");
-			}else{
-				/* 无效电平或间隔 */
-				cValid = 0;
-				cInvalid++;
-				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
-				printf("*");
-			}
-
-			cbit += bi;
-			pb += bi;
-		}
-	}
-
-	printf("\n");
-	if(cbit != 0){
-		fork_play(ipcmPlay, cbit);
-	}
-
-}
-
-/************************* alas end  *************************************************/
 #else
 
 int init_pcm_play(struct pcmConf *pcm)
@@ -338,9 +413,9 @@ int init_pcm_play(struct pcmConf *pcm)
 		return -1;
 	}
 
-	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_RATE,&pcm->sampleFrequency);
+	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_CHANNELS,&pcm->channels);
 	if(ret==-1){
-		perror("error from SOUND_PCM_WRITE_RATE ioctl");
+		perror("error from SOUND_PCM_WRITE_CHANNELS ioctl");
 		return -1;
 	}
 
@@ -349,6 +424,15 @@ int init_pcm_play(struct pcmConf *pcm)
 		perror("error from SOUND_PCM_WRITE_BITS ioctl");
 		return -1;
 	}
+
+	ret=ioctl(pcm->handle,SOUND_PCM_WRITE_RATE,&pcm->sampleFrequency);
+	if(ret==-1){
+		perror("error from SOUND_PCM_WRITE_RATE ioctl");
+		return -1;
+	}
+
+
+	
 
 	pcm->buffer =(char*)malloc(pcm->size);
 
@@ -376,58 +460,5 @@ void free_pcm_play(struct pcmConf *pcm)
 	semctl(pcm->semid, 0, IPC_RMID,pcm->semVal);
 }
 
-
-void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
-{
-	int i = 0;
-	int k;
-	int ret;
-	int cbit = 0;
-	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
-
-	int cValid = 0;
-	int cInvalid = 0;
-
-	char *pb = ipcmPlay->buffer;
-	memset(pb,0,sizeof(ipcmPlay->size));
-
-
-	for(i = len-1; i >= 0; i--){
-		for(k=7; k>=0; k--){
-			if( (cbit + bi) > ipcmPlay->size){
-				/* 防止数组越界，需要先清空数据 */
-
-				fork_play(ipcmPlay, cbit);
-		
-				pb = ipcmPlay->buffer;
-				cbit = 0;
-			}
-
-			if((buff[i] & (1<<k)) == 0){
-				/* 有效电平 */
-				cValid++;
-				cInvalid = 0;
-				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
-				printf(".");
-			}else{
-				/* 无效电平或间隔 */
-				cValid = 0;
-				cInvalid++;
-				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
-				printf("*");
-			}
-
-			cbit += bi;
-			pb += bi;
-		}
-	}
-
-	printf("\n");
-	if(cbit != 0){
-		fork_play(ipcmPlay, cbit);
-	}
-
-
-}
 
 #endif

@@ -5,7 +5,6 @@
  * Description:
  *     信号仅对有效信元进行消除抖动;
  *     目前仅实现RTC定时模式;
- *     TODO: 发送时机的确定，应当是一个完整的字
  * History:
  *     <author>        <time>        <desc>
  *
@@ -58,7 +57,7 @@ struct signalProcess *require_signal_process(void)
 		return NULL;
 	}
 
-	memset(sp->level_strem, 0xff, STREAM_MAX_SECONDS * 4);
+	memset(sp->level_stream, 0xff, STREAM_MAX_SECONDS * 4);
 
 	sp->soft_dithering_pass = soft_dithering_pass;
 
@@ -155,19 +154,33 @@ int run_process(struct signalProcess *sp)
 
 				}else if( sp->curCinva >= (sp->minCZ * 7)){
 					/*启动传输*/	
+#ifdef  PADDING_INVALID_CODE
 					int cbit = 0;
 					int cb = 0;
 					cbit = start % 8;
 					if(cbit != 0){
 						cbit = 8 - cbit;
 						// 插入补齐 TODO: 插值算法需要优化
-						for(cb = 0; cb < cbit; cb++)
+						for(cb = 0; cb < cbit; cb++){
 							stream_fifo_write(sp, INVALID_LEVEL);
+						}
 					}
-					sp->transmit_cb((char *)sp->level_strem, (start + cbit) / 8);
+					sp->transmit_cb((char *)sp->level_stream, (start + cbit) / 8);
+#else
+					int byteCnt = 0;
+					byteCnt= start / 8;
+					if((start % 8) > 0)
+						byteCnt++;
+
+					char *tbuf = malloc(byteCnt + 2); // 长度占2个字节
+					memcpy(tbuf + 2, (char *)sp->level_stream,  byteCnt);
+					*tbuf = (unsigned short)start;   // 标识位长度
+					sp->transmit_cb(tbuf, byteCnt + 2);
+					free(tbuf);
+#endif
 					start = STOP_STATUS;
 				}
-				
+
 			}
 			//if(sp->verbose && (start > 0)){
 			if(sp->verbose){
@@ -179,12 +192,12 @@ int run_process(struct signalProcess *sp)
 				for(k=0; k < STREAM_MAX_SECONDS; k++){
 					if(sp->verbose == 1){
 						/* 按16进制显示*/
-						printf(" %08x", sp->level_strem[k]);
+						printf(" %08x", sp->level_stream[k]);
 					}else if(sp->verbose == 2){
 						int j=0;
 						/* 按二进制显示*/
 						for(j=0; j<32; j++)
-							printf("%d", (sp->level_strem[k] >> j) & 0x01);
+							printf("%d", (sp->level_stream[k] >> j) & 0x01);
 						printf(" ");
 					}
 
@@ -219,8 +232,8 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 	else
 		sp->curCinva = 0;
 	for(i = 0; i < STREAM_MAX_SECONDS; i++){
-		char Hbit = (sp->level_strem[i] & 0x80000000) ? 1:0;
-		sp->level_strem[i] = (((sp->level_strem[i] & 0x7fffffff) << 1 ) | l);
+		char Hbit = (sp->level_stream[i] & 0x80000000) ? 1:0;
+		sp->level_stream[i] = (((sp->level_stream[i] & 0x7fffffff) << 1 ) | l);
 		l = Hbit;
 	}
 
@@ -235,7 +248,7 @@ static int find_transmit_point(struct signalProcess *sp)
 	//scan zero min
 	for(i = STREAM_MAX_SECONDS; i>0; i--){
 		for(j=31; j >=0; j--){
-			if((sp->level_strem[i-1] & (1<< j)) == 0){
+			if((sp->level_stream[i-1] & (1<< j)) == 0){
 				//This is zero
 				new = 0;
 				c++;

@@ -1,7 +1,7 @@
 
 PREFIX=/usr/local
 
-#PLATFORM= "arm"
+PLATFORM= "arm"
 
 ifeq ($(PLATFORM), "arm")
 CC=arm-linux-gcc
@@ -11,6 +11,7 @@ endif
 
 CFLAGS+=-DENABLE_DEUG_SIM
 CFLAGS+=-DSELF_TEST_FOR_PIPE
+#CFLAGS+=-DPADDING_INVALID_CODE
 
 DFLAGS+=-lm -lrt -lpthread
 

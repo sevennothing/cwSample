@@ -42,7 +42,7 @@ struct signalProcess {
 	int curCinva;  /* 当前连1个数 */
 
 	char morse_uff[MORSE_CHAR_MAX];
-	int level_strem[STREAM_MAX_SECONDS];  /* 一个int 数据存储1s的数据 */
+	int level_stream[STREAM_MAX_SECONDS];  /* 一个int 数据存储1s的数据 */
 	
 	unsigned int sampleFreq_Hz;     /* 采样速率设置，必须为2的幂, 默认值为 64HZ*/
 
