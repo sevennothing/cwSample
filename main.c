@@ -155,12 +155,13 @@ int main(int argc, char **argv)
 		g_pcmPlay.bit = 8;
 		g_pcmPlay.channels = 1;
 		g_pcmPlay.sampleFrequency = 8000;
-		g_pcmPlay.datablock = 1;
+		g_pcmPlay.datablock = 2;
 
 		g_pcmPlay.cwFrequency = 800;
 		g_pcmPlay.volume   =  70;
 
-		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ;
+		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ + 100; /* g_pcmPlay.sampleFrequency / TRIG_FREQ 是GPIo采样点转换为sampleFrequency 
+		采样的插值点。 +100 是做的速率调整 */
 		
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM config:\n");
@@ -177,16 +178,22 @@ int main(int argc, char **argv)
 		g_pcmPlay.bit = 8;
 		g_pcmPlay.channels = 1;
 		g_pcmPlay.sampleFrequency = 8000;
-		g_pcmPlay.size = 4000;
+		//g_pcmPlay.size = 4096;
 		
 		g_pcmPlay.cwFrequency = 800;
 		g_pcmPlay.volume   =  70;
 		
+		g_pcmPlay.datablock = 2;
+		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ + 500;  
+
+
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM config:\n");
 		printf("  采样位数:%d\n", g_pcmPlay.bit);
 		printf("  通道数:%d\n", g_pcmPlay.channels);
 		printf("  采样频率:%d\n", g_pcmPlay.sampleFrequency);
+		printf("  datablock:%d\n", g_pcmPlay.datablock);
+		printf("  frames:%d\n", g_pcmPlay.frames);
 		printf("  size:%d\n", g_pcmPlay.size);
 		printf("  semid:%x\n", g_pcmPlay.semid);
 		printf("  CW-Freq:%d\n", g_pcmPlay.cwFrequency);

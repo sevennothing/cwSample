@@ -137,10 +137,6 @@ static void playCW(void *param)
 	ret = write(ipcmPlay->handle, pbuf, len);
 	if(ret==-1){
 		perror("Fail to play the sound!");
-		free(pbuf);
-		free(tparam);
-		pthread_exit(0);
-		return;
 	}
 	/* 下面的代码用于在更改播放文件的参数时，播放掉缓冲区内的内容 */
 	//ret = ioctl(ipcmPlay->handle, SOUND_PCM_SYNC, 0);
@@ -194,12 +190,13 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	int cValid = 0;
 	int cInvalid = 0;
 	int cbit = 0;
-	int bi = ipcmPlay->sampleFrequency / TRIG_FREQ;
+	int bi = ipcmPlay->frames;
 
 	char *pb = ipcmPlay->buffer;
 	memset(pb,0,sizeof(ipcmPlay->size));
 
 	/* 人为插入一个补足点，用于平滑初始音频 */
+	cInvalid++;
 	insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
 	printf("*");
 	pb+=bi;
@@ -438,9 +435,7 @@ int init_pcm_play(struct pcmConf *pcm)
 		perror("error from SOUND_PCM_WRITE_RATE ioctl");
 		return -1;
 	}
-
-
-	
+	pcm->size = pcm->frames * (pcm->datablock); /*4 代表数据快长度*/
 
 	pcm->buffer =(char*)malloc(pcm->size);
 

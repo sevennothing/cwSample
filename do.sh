@@ -15,4 +15,4 @@ sudo chown root:root cws
 
 sudo chmod +s cws
 
-./cws -n 2
+sudo ./cws -n 2

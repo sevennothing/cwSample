@@ -43,16 +43,16 @@ struct pcmConf
 
 #ifdef  USE_ALAS_DRIVER
 	snd_pcm_t* handle; //PCI设备句柄
-	int datablock;
 	snd_pcm_uframes_t frames;
 
 #else
 	int handle;
-
+	int frames;
 #endif
 	int bit;	 // 采样位数
 	int channels;
 	int sampleFrequency;
+	int datablock;
 	int size;
 	char *buffer;
 

@@ -1,7 +1,7 @@
 
 PREFIX=/usr/local
 
-#PLATFORM= "arm"
+PLATFORM= "arm"
 
 ifeq ($(PLATFORM), "arm")
 CC=arm-linux-gcc
