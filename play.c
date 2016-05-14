@@ -101,6 +101,7 @@ struct threadParam {
 	struct pcmConf *pcm;
 	int len;
 	char *pbuf;
+	char last;  /*最后一帧标记*/
 };
 
 static void playCW(void *param)
@@ -115,19 +116,21 @@ static void playCW(void *param)
 	/* alsa 必须以帧为单位进行播放 */
 	while(ret = snd_pcm_writei(ipcmPlay->handle, pbuf, len) < 0)
 	{
-		//if (ret == -EPIPE)
-		//{
+	//	printf("play %d\n", len);
+		if (ret == -EPIPE)
+		{
 			/* EPIPE means underrun */
 			fprintf(stderr, "underrun occurred(%d)\n",len);
 			//完成硬件参数设置，使设备准备好 
 			snd_pcm_prepare(ipcmPlay->handle);
-		//}
-		//else if (ret < 0)
-	//	{
-	//		fprintf(stderr,
-	//				"error from writei: %s\n",
-	//				snd_strerror(ret));
-	//	}
+		}
+		else if (ret < 0)
+		{
+			fprintf(stderr,
+					"error from writei: %s\n",
+					snd_strerror(ret));
+		}
+
 	}
 
 #else
@@ -135,6 +138,7 @@ static void playCW(void *param)
 	if(ret==-1){
 		perror("Fail to play the sound!");
 		free(pbuf);
+		free(tparam);
 		pthread_exit(0);
 		return;
 	}
@@ -145,23 +149,26 @@ static void playCW(void *param)
 #endif
 
 	free(pbuf);
+	free(tparam);
 	ret = V(ipcmPlay->semid, 0);
 	pthread_exit(0);
 
 }
 
 /* 播放较慢且阻塞，插值耗时，将二者分离*/
-void fork_play(struct pcmConf *ipcmPlay, int len)
+void fork_play(struct pcmConf *ipcmPlay, int len, char last)
 {
 	pthread_t tid = 0;
 	pthread_attr_t attr;
 	int ret;
+	static k = 0;
 
-	struct threadParam tparam;
-	tparam.pcm = ipcmPlay;
-	tparam.len = len;
-	tparam.pbuf = malloc(len);
-	memcpy(tparam.pbuf, ipcmPlay->buffer, len);
+	struct threadParam *tparam = malloc(sizeof(struct threadParam));
+	tparam->pcm = ipcmPlay;
+	tparam->len = len;
+	tparam->pbuf = malloc(len);
+	tparam->last = last;
+	memcpy(tparam->pbuf, ipcmPlay->buffer, len);
 
 	ret = P(ipcmPlay->semid, 0);
 	if(tid > 0){
@@ -172,7 +179,8 @@ void fork_play(struct pcmConf *ipcmPlay, int len)
 	//pthread_attr_init(&attr);
 	//pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED); // 分离线程
 
-	ret = pthread_create(&tid, NULL, (void *)playCW, &tparam);
+	ret = pthread_create(&tid, NULL, (void *)playCW, tparam);
+	
 
 	return;
 }
@@ -202,7 +210,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 		for(k=7; k>=0; k--){
 			if( (cbit + bi) > ipcmPlay->size){
 				/* 防止数组越界，需要先清空数据 */
-				fork_play(ipcmPlay, cbit);
+				fork_play(ipcmPlay, cbit, 0);
 				pb = ipcmPlay->buffer;
 				cbit = 0;
 			}
@@ -228,8 +236,9 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 
 	printf("\n");
 	if(cbit != 0){
-		fork_play(ipcmPlay, cbit);
+		fork_play(ipcmPlay, cbit, 1); // the last player
 	}
+
 #else
 	unsigned short bitLen = *(unsigned short *)buff;
 	char remainderBit = bitLen % 8;
@@ -244,7 +253,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 		for(; k>=0; k--){
 			if( (cbit + bi) > ipcmPlay->size){
 				/* 防止数组越界，需要先清空数据 */
-				fork_play(ipcmPlay, cbit);
+				fork_play(ipcmPlay, cbit,0);
 				pb = ipcmPlay->buffer;
 				cbit = 0;
 			}
@@ -270,9 +279,8 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 
 	printf("\n");
 	if(cbit != 0){
-		fork_play(ipcmPlay, cbit);
+		fork_play(ipcmPlay, cbit, 1);
 	}
-
 
 #endif
 

@@ -157,10 +157,10 @@ int main(int argc, char **argv)
 		g_pcmPlay.sampleFrequency = 8000;
 		g_pcmPlay.datablock = 1;
 
-		g_pcmPlay.cwFrequency = 900;
+		g_pcmPlay.cwFrequency = 800;
 		g_pcmPlay.volume   =  70;
 
-		g_pcmPlay.frames = 500;
+		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ;
 		
 		init_pcm_play(&g_pcmPlay);
 		printf("PCM config:\n");
@@ -179,7 +179,7 @@ int main(int argc, char **argv)
 		g_pcmPlay.sampleFrequency = 8000;
 		g_pcmPlay.size = 4000;
 		
-		g_pcmPlay.cwFrequency = 900;
+		g_pcmPlay.cwFrequency = 800;
 		g_pcmPlay.volume   =  70;
 		
 		init_pcm_play(&g_pcmPlay);
