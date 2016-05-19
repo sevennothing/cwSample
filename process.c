@@ -61,6 +61,8 @@ struct signalProcess *require_signal_process(void)
 
 	sp->soft_dithering_pass = soft_dithering_pass;
 
+	sp->minCZ = 0xFFFF;
+	sp->minCO = 0xFFFF;
 	//sp->setup_voice = setupVoice;
 
 	modifyFlag = 0;
@@ -138,7 +140,7 @@ int run_process(struct signalProcess *sp)
 
 		if(start > 0){
 			stream_fifo_write(sp, level);
-			if((start % 8) == 0)
+			if((start % 3) == 0)
 			find_transmit_point(sp, start);	
 
 			if(sp->decode_enable && (sp->decode_process != NULL)){
@@ -153,6 +155,8 @@ int run_process(struct signalProcess *sp)
 
 				}else if( sp->curCinva >= (sp->minCO * 7)){
 					/*启动传输*/	
+					printf(">>%d-%d ",sp->minCZ, sp->minCO);
+					fflush(stdout);
 #ifdef  PADDING_INVALID_CODE
 					int cbit = 0;
 					int cb = 0;
@@ -182,6 +186,10 @@ int run_process(struct signalProcess *sp)
 					sp->minCO = 0xFFFF;
 				}
 
+			}
+			if(start >= (STREAM_MAX_SECONDS * 32)){
+				printf("drop this start stream!\n");
+				start = STOP_STATUS;
 			}
 			//if(sp->verbose && (start > 0)){
 			if(sp->verbose){
@@ -216,7 +224,7 @@ int run_process(struct signalProcess *sp)
 
 static int soft_dithering_pass(struct signalProcess *sp, char *flag)
 {
-	usleep(10000); /* 10ms 延迟 */
+	usleep(15000); /* 10ms 延迟 */
 	if(VALID_LEVEL ==  sp->get_signal_cb()) 
 		*flag = 1;  /* 有效 */
 	else
@@ -247,13 +255,11 @@ static int find_transmit_point(struct signalProcess *sp, int bits)
 	unsigned int co = 0;
 	unsigned int minCZ = 0xffff ;//最少连续0个数
 	unsigned int minCO = 0xffff ;//最少连续1个数
-	char new = 1;
-	unsigned char words = 0;
+	char new = 0;
+	unsigned char words = bits/32;
 	unsigned char lastBit = bits % 32;
 
 
-	words = bits / 32;
-	lastBit = bits % 32;
 	if(lastBit > 0){
 		j = lastBit - 1;
 		words++;
@@ -265,28 +271,30 @@ static int find_transmit_point(struct signalProcess *sp, int bits)
 		for(; j >=0; j--){
 			if((sp->level_stream[i-1] & (1<< j)) == 0){
 				//This is zero
+				if((new == 1) &&(co > 0 && co < minCO)){
+					minCO = co;
+				}
+				co = 0;
 				new = 0;
 				c++;
-				if(co > 0 && co < minCO)
-					minCO = co;
-				co = 0;
-			}else if((new == 0) &&( c < minCZ)){
-				minCZ = c;		
-				//printf("==>%d ",minCZ);
+			}else{
+				if((new == 0) && (c > 0) && (c < minCZ)){
+					minCZ = c;
+				}
 				c = 0;
 				new = 1;
 				co++;
-			} else{
-				new = 1;
-				c = 0;
-				co++;
+
 			}
 		}
+		j = 31;
 	}
-	sp->minCZ = minCZ;
-	sp->minCO = minCO;
+	if(sp->minCZ > minCZ)
+		sp->minCZ = minCZ;
+	if(sp->minCO > minCO)
+		sp->minCO = minCO;
 
-	//printf("CO=%d, CZ=%d\n", minCO, minCZ);
+	//printf("%d:CO=%d(%d), CZ=%d\n",bits, sp->minCO,minCO,sp->minCZ);
 	return 0;
 
 }

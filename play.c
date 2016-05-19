@@ -236,13 +236,13 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	unsigned short bitLen = *(unsigned short *)buff;
 	char remainderBit = bitLen % 8;
 
+	if(remainderBit > 0){
+		k = remainderBit - 1;
+	}else{
+		k = 7;
+	}
+
 	for(i = len-1; i >=2; i--){
-		if(remainderBit > 0){
-			k = remainderBit - 1;
-			remainderBit = 0;
-		}else{
-			k = 7;
-		}
 		for(; k>=0; k--){
 			if( (cbit + bi) > ipcmPlay->size){
 				/* 防止数组越界，需要先清空数据 */
@@ -268,6 +268,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 			cbit += bi;
 			pb += bi;
 		}
+		k = 7;
 	}
 
 	printf("\n");
