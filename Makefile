@@ -28,7 +28,7 @@ ALL: cws
 install: ALL
 	        install -sc cws ${PREFIX}/bin
 
-cws: cw_gpio.o main.o trans.o process.o pcm.o play.o
+cws: cw_gpio.o main.o trans.o process.o play.o
 	        ${CC} ${CFLAGS} -o cws ${DFLAGS}  $^
 
 
