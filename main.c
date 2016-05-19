@@ -187,7 +187,7 @@ int main(int argc, char **argv)
 		g_pcmPlay.volume   =  70;
 		
 		g_pcmPlay.datablock = 2;
-		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ + 500;  
+		g_pcmPlay.frames = g_pcmPlay.sampleFrequency / TRIG_FREQ + 100;  
 
 
 		init_pcm_play(&g_pcmPlay);

@@ -194,7 +194,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 	/* 人为插入一个补足点，用于平滑初始音频 */
 	cInvalid++;
 	insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
-	printf("*");
+	//printf("*");
 	pb+=bi;
 	cbit +=bi;
 
@@ -256,13 +256,13 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 				cValid++;
 				cInvalid = 0;
 				insert_point(ipcmPlay,VALID_LEVEL, pb, bi, cValid, cInvalid);
-				printf(".");
+				//printf(".");
 			}else{
 				/* 无效电平或间隔 */
 				cValid = 0;
 				cInvalid++;
 				insert_point(ipcmPlay,INVALID_LEVEL, pb, bi,cValid, cInvalid);
-				printf("*");
+				//printf("*");
 			}
 
 			cbit += bi;
@@ -271,7 +271,7 @@ void pcmPlay(struct pcmConf *ipcmPlay, char buff[], int len)
 		k = 7;
 	}
 
-	printf("\n");
+	//printf("\n");
 	if(cbit != 0){
 		fork_play(ipcmPlay, cbit, 1);
 	}

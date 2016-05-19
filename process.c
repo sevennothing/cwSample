@@ -141,7 +141,7 @@ int run_process(struct signalProcess *sp)
 		if(start > 0){
 			stream_fifo_write(sp, level);
 			if((start % 3) == 0)
-			find_transmit_point(sp, start);	
+				find_transmit_point(sp, start);	
 
 			if(sp->decode_enable && (sp->decode_process != NULL)){
 				//TODO: 电信号解码成morse
@@ -155,8 +155,10 @@ int run_process(struct signalProcess *sp)
 
 				}else if( sp->curCinva >= (sp->minCO * 7)){
 					/*启动传输*/	
-					printf(">>%d-%d ",sp->minCZ, sp->minCO);
-					fflush(stdout);
+					if(sp->verbose){
+						printf(">>%d-%d ",sp->minCZ, sp->minCO);
+						fflush(stdout);
+					}
 #ifdef  PADDING_INVALID_CODE
 					int cbit = 0;
 					int cb = 0;
