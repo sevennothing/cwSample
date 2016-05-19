@@ -15,4 +15,6 @@ sudo chown root:root cws
 
 sudo chmod +s cws
 
+sudo pulseaudio -k ; sudo pulseaudio -D --log-target=syslog
+
 sudo ./cws -n 2

@@ -40,6 +40,7 @@ struct signalProcess {
 
 	int fd;     /* timer handle */
 	int minCZ;  /* 最少连0个数 */
+	int minCO;  /* 最少连1个数 */
 	int curCinva;  /* 当前连1个数 */
 
 	char morse_uff[MORSE_CHAR_MAX];

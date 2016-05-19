@@ -35,7 +35,7 @@ static int free_timer(int fd);
 static int wait_for_timer(int fd);
 static int soft_dithering_pass(struct signalProcess *sp, char *flag);
 static int stream_fifo_write(struct signalProcess *sp, char v);
-static int find_transmit_point(struct signalProcess *sp);
+static int find_transmit_point(struct signalProcess *sp, int bits);
 
 static int modifyFlag = 0;
 
@@ -138,9 +138,8 @@ int run_process(struct signalProcess *sp)
 
 		if(start > 0){
 			stream_fifo_write(sp, level);
-			if((start % 8) == 0){ /*每采样8个点进行一次查找*/
-				find_transmit_point(sp);	
-			}
+			if((start % 8) == 0)
+			find_transmit_point(sp, start);	
 
 			if(sp->decode_enable && (sp->decode_process != NULL)){
 				//TODO: 电信号解码成morse
@@ -152,7 +151,7 @@ int run_process(struct signalProcess *sp)
 				//TODO: 网络传输采样信息
 				if(sp->curCinva < 7){
 
-				}else if( sp->curCinva >= (sp->minCZ * 7)){
+				}else if( sp->curCinva >= (sp->minCO * 7)){
 					/*启动传输*/	
 #ifdef  PADDING_INVALID_CODE
 					int cbit = 0;
@@ -179,6 +178,8 @@ int run_process(struct signalProcess *sp)
 					free(tbuf);
 #endif
 					start = STOP_STATUS;
+					sp->minCZ = 0xFFFF;
+					sp->minCO = 0xFFFF;
 				}
 
 			}
@@ -238,32 +239,55 @@ static int stream_fifo_write(struct signalProcess *sp, char v)
 	}
 
 }
-//TODO: 更新算法，采用start开始
-static int find_transmit_point(struct signalProcess *sp)
+
+static int find_transmit_point(struct signalProcess *sp, int bits)
 {
 	int i,j;
 	unsigned int c = 0;
+	unsigned int co = 0;
 	unsigned int minCZ = 0xffff ;//最少连续0个数
+	unsigned int minCO = 0xffff ;//最少连续1个数
 	char new = 1;
+	unsigned char words = 0;
+	unsigned char lastBit = bits % 32;
+
+
+	words = bits / 32;
+	lastBit = bits % 32;
+	if(lastBit > 0){
+		j = lastBit - 1;
+		words++;
+	}else{
+		j = 31;
+	}
 	//scan zero min
-	for(i = STREAM_MAX_SECONDS; i>0; i--){
-		for(j=31; j >=0; j--){
+	for(i = words; i>0; i--){
+		for(; j >=0; j--){
 			if((sp->level_stream[i-1] & (1<< j)) == 0){
 				//This is zero
 				new = 0;
 				c++;
+				if(co > 0 && co < minCO)
+					minCO = co;
+				co = 0;
 			}else if((new == 0) &&( c < minCZ)){
 				minCZ = c;		
 				//printf("==>%d ",minCZ);
 				c = 0;
 				new = 1;
+				co++;
 			} else{
 				new = 1;
 				c = 0;
+				co++;
 			}
 		}
 	}
 	sp->minCZ = minCZ;
+	sp->minCO = minCO;
+
+	//printf("CO=%d, CZ=%d\n", minCO, minCZ);
+	return 0;
 
 }
 
